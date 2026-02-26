@@ -12,7 +12,7 @@
     <string name="tab_reader">Scan</string>
     <string name="tab_inventory">Inventory</string>
     <string name="tab_data">Data</string>
-    <string name="tab_tag">Tag</string>
+    <string name="tab_tag">Copy</string>
     <string name="tab_misc">Misc</string>
 
     <string name="voice_status_prefix">Voice %1$s</string>
