@@ -1,6 +1,13 @@
-# 📱 Android 拓竹 RFID 标签识别 & 库存管理应用
+# 📱 Android 拓竹 RFID 标签识别与复制 & 库存管理应用
 
-一款可直接使用 **Android 手机**识别 **拓竹（Bambu）RFID 标签**，并支持 **耗材库存管理** 的应用程序。
+一款可直接使用 **Android 手机**识别与复制 **拓竹（Bambu）RFID 标签**，并支持 **耗材库存管理** 的应用程序。
+
+------
+
+## ✅ 运行环境
+
+- Android 10+
+- NFC (支持Mifare Classic读写功能)
 
 ------
 
@@ -8,51 +15,14 @@
 
 - 📌 **读取拓竹 RFID 标签信息**
 - 📦 **耗材库存管理（入库 / 出库 / 统计）**
-- 🗂️ **支持导入耗材配置文件，显示更完整的耗材信息**
-- ⏺ **复制与定义标签数据**
-
-## 📘 文档
-
-- [使用与功能说明](./使用与功能说明.md)
-- [QA 文档](./QA.md)
+- ⏺ **复制写入标签数据**
+- 🧰 **杂项工具：标签完整数据导出、秘钥导出、数据库备份/导入、标签数据打包/导入、格式化标签**
 
 ------
 
-## ⚠️ 数据库与配置文件位置（务必备份）
+## 📚 教程
 
-应用数据库与耗材信息配置文件存放在：
 
-```
-Android/data/com.m0h31h31.bamburfidreader/files
-```
-
-📌 **注意：升级 / 换机 / 清理缓存前请先备份该目录内容！**
-
-------
-
-## 🎨 耗材信息配置文件来源（官方 Bambu Studio）
-
-耗材配置文件来自拓竹官方 **Bambu Studio**，文件名：
-
-```
-filaments_color_codes.json
-```
-
-可在以下路径找到：
-
-### 方式 1：Bambu Studio 安装目录
-
-```
-Bambu Studio\resources\profiles\BBL\filament\filaments_color_codes.json
-```
-
-### 方式 2：用户配置目录（Windows）
-
-```
-C:\Users\<username>\AppData\Roaming\BambuStudio\system\BBL\filament\filaments_color_codes.json
-```
-
-当官方耗材数据更新时替换Android/data/com.m0h31h31.bamburfidreader/files的filaments_color_codes.json已更新耗材数据
 
 ------
 
@@ -75,16 +45,25 @@ C:\Users\<username>\AppData\Roaming\BambuStudio\system\BBL\filament\filaments_co
 
 ## 🗺️ 开发计划 / 进度
 
-| 功能                     | 状态       |
-| ------------------------ | ---------- |
-| 读取标签                 | ✅ 已完成   |
-| 库存管理                 | ⏳ 部分完成 |
-| 复制标签（支持 AMS）     | ⏳ 未完成   |
-| 自定义标签（不支持 AMS） | ⏳ 未完成   |
+| 功能         | 状态     |
+| ------------ | -------- |
+| 读取标签     | ✅ 已完成 |
+| 库存管理     | ✅ 已完成 |
+| 复制标签     | ✅ 已完成 |
+| 耗材余量同步 | ⏳ 未完成 |
 
 ------
 
 ## 📚 参考资料
 
 - RFID 标签指南（Bambu Research Group）
+
    https://github.com/Bambu-Research-Group/RFID-Tag-Guide
+
+- MifareClassicTool
+
+   https://github.com/ikarus23/MifareClassicTool
+
+- Bambu-Lab-RFID-Library
+
+​	https://github.com/queengooborg/Bambu-Lab-RFID-Library
