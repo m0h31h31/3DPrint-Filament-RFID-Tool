@@ -8,6 +8,8 @@ import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
 import android.nfc.NfcAdapter
+import android.nfc.NdefMessage
+import android.nfc.NdefRecord
 import android.nfc.Tag
 import android.nfc.tech.MifareClassic
 import android.os.Build
@@ -26,6 +28,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.m0h31h31.bamburfidreader.ui.navigation.AppNavigation
+import com.m0h31h31.bamburfidreader.ui.screens.NdefWriteRequest
+import com.m0h31h31.bamburfidreader.ui.screens.NdefWriteType
 import com.m0h31h31.bamburfidreader.ui.theme.BambuRfidReaderTheme
 import com.m0h31h31.bamburfidreader.util.normalizeColorValue
 import com.m0h31h31.bamburfidreader.utils.ConfigManager
@@ -269,10 +273,12 @@ class MainActivity : ComponentActivity() {
     private var pendingWriteItem by mutableStateOf<ShareTagItem?>(null)
     private var pendingVerifyItem by mutableStateOf<ShareTagItem?>(null)
     private var pendingClearFuid by mutableStateOf(false)
+    private var pendingNdefWriteRequest by mutableStateOf<NdefWriteRequest?>(null)
     private var shareLoading by mutableStateOf(false)
     private var shareRefreshStatusMessage by mutableStateOf("")
     private var shareRefreshStatusClearJob: Job? = null
     private var miscStatusMessage by mutableStateOf("")
+    private var writeToolStatusMessage by mutableStateOf("")
     private var debugInfoDialog: android.app.AlertDialog? = null
     private val debugInfoBuffer = StringBuilder()
     private val debugInfoLock = Any()
@@ -360,6 +366,8 @@ class MainActivity : ComponentActivity() {
                     writeStatusMessage = "正在写入，请保持标签稳定贴合，切勿移动..."
                 } else if (pendingVerifyItem != null) {
                     writeStatusMessage = "正在校验，请保持标签稳定贴合，切勿移动..."
+                } else if (pendingNdefWriteRequest != null) {
+                    writeToolStatusMessage = "正在写入NDEF数据，请保持标签稳定贴合，切勿移动..."
                 } else if (pendingClearFuid) {
                     miscStatusMessage = "正在格式化标签，请保持标签稳定贴合，切勿移动..."
                 }
@@ -397,6 +405,22 @@ class MainActivity : ComponentActivity() {
                     } else {
                         playFeedbackTone(FeedbackTone.FAILURE)
                     }
+                }
+            } else if (pendingNdefWriteRequest != null) {
+                val request = pendingNdefWriteRequest
+                val result = if (request != null) {
+                    writeNdefDataAndVerify(tag, request)
+                } else {
+                    "NDEF写入任务为空"
+                }
+                runOnUiThread {
+                    writeToolStatusMessage = result
+                    if (result.contains("成功")) {
+                        playFeedbackTone(FeedbackTone.SUCCESS)
+                    } else {
+                        playFeedbackTone(FeedbackTone.FAILURE)
+                    }
+                    pendingNdefWriteRequest = null
                 }
             } else if (pendingClearFuid) {
                 val result = clearFuidAndResetTag(tag)
@@ -558,6 +582,7 @@ class MainActivity : ComponentActivity() {
                     shareLoading = shareLoading,
                     shareRefreshStatusMessage = shareRefreshStatusMessage,
                     writeStatusMessage = writeStatusMessage,
+                    writeToolStatusMessage = writeToolStatusMessage,
                     writeInProgress = pendingWriteItem != null || pendingVerifyItem != null,
                     onTagScreenEnter = {
                         refreshShareTagItemsAsync()
@@ -581,6 +606,9 @@ class MainActivity : ComponentActivity() {
                         pendingWriteItem = null
                         pendingVerifyItem = null
                         writeStatusMessage = "已取消写入任务"
+                    },
+                    onStartNdefWrite = { request ->
+                        enqueueNdefWriteTask(request)
                     }
                 )
                 // 重置导航标志
@@ -595,6 +623,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun enqueueWriteTask(item: ShareTagItem) {
+        if (pendingClearFuid || pendingNdefWriteRequest != null) {
+            writeStatusMessage = "请先完成当前贴卡任务"
+            return
+        }
         val trayUid = item.trayUid.trim()
         if (trayUid.isNotBlank() && isTrayUidExists(trayUid)) {
             android.app.AlertDialog.Builder(this@MainActivity)
@@ -1061,8 +1093,45 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun enqueueNdefWriteTask(request: NdefWriteRequest): String {
+        if (pendingWriteItem != null || pendingVerifyItem != null || pendingClearFuid || pendingNdefWriteRequest != null) {
+            return "请先完成当前贴卡任务"
+        }
+
+        val validationError = validateNdefWriteRequest(request)
+        if (validationError != null) {
+            writeToolStatusMessage = validationError
+            return validationError
+        }
+
+        pendingNdefWriteRequest = request
+        writeToolStatusMessage = "NDEF写入准备就绪：请将目标标签紧贴 NFC 区域，保持静止直到写入与校检完成。"
+        return writeToolStatusMessage
+    }
+
+    private fun validateNdefWriteRequest(request: NdefWriteRequest): String? {
+        return when (request.type) {
+            NdefWriteType.TEXT -> {
+                if (request.textContent.isBlank()) "请输入要写入的文本内容" else null
+            }
+            NdefWriteType.URL -> {
+                if (request.url.isBlank()) "请输入网页地址" else null
+            }
+            NdefWriteType.PHONE -> {
+                if (request.phone.isBlank()) "请输入电话号码" else null
+            }
+            NdefWriteType.WIFI -> {
+                when {
+                    request.wifiSsid.isBlank() -> "请输入WiFi名称(SSID)"
+                    request.wifiSecurity.isBlank() -> "请输入WiFi加密类型（WPA/WEP/NONE）"
+                    else -> null
+                }
+            }
+        }
+    }
+
     private fun enqueueClearFuidTask(): String {
-        if (pendingWriteItem != null || pendingVerifyItem != null) {
+        if (pendingWriteItem != null || pendingVerifyItem != null || pendingNdefWriteRequest != null) {
             return "请先完成或取消当前写入/校验任务"
         }
         resetDebugInfoDialog("格式化标签调试")
@@ -1754,6 +1823,180 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) {
             }
         }
+    }
+
+    private fun writeNdefDataAndVerify(tag: Tag, request: NdefWriteRequest): String {
+        val message = try {
+            buildNdefMessage(request)
+        } catch (e: Exception) {
+            return "NDEF写入失败：生成消息异常 ${e.message.orEmpty()}"
+        }
+        val expectedBytes = message.toByteArray()
+        val mifareClassic = MifareClassic.get(tag)
+
+        return try {
+            if (mifareClassic != null) {
+                writeNdefByMifareClassicMappingAndVerify(mifareClassic, expectedBytes)
+            } else {
+                "NDEF写入失败：标签不支持 MIFARE Classic 直写映射"
+            }
+        } catch (e: Exception) {
+            "NDEF写入失败：${e.message.orEmpty()}"
+        } finally {
+            try {
+                mifareClassic?.close()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun writeNdefByMifareClassicMappingAndVerify(
+        mifare: MifareClassic,
+        ndefPayload: ByteArray
+    ): String {
+        val ffKey = ByteArray(6) { 0xFF.toByte() }
+        val tlv = buildNdefTlv(ndefPayload)
+
+        return try {
+            if (!mifare.isConnected) {
+                mifare.connect()
+            }
+            if (mifare.sectorCount <= 1) {
+                return "NDEF写入失败：M1卡扇区数量不足"
+            }
+
+            val dataBlocks = ArrayList<Int>()
+            for (sector in 1 until mifare.sectorCount) {
+                val authOk = authenticateSectorWithRetry(
+                    mifare = mifare,
+                    sectorIndex = sector,
+                    keysA = listOf(ffKey),
+                    keysB = listOf(ffKey)
+                )
+                if (!authOk) {
+                    return "NDEF写入失败：M1映射认证失败（扇区 $sector，需FF秘钥）"
+                }
+                val startBlock = mifare.sectorToBlock(sector)
+                val blockCount = mifare.getBlockCountInSector(sector)
+                val trailerBlock = startBlock + blockCount - 1
+                for (offset in 0 until blockCount) {
+                    val blockIndex = startBlock + offset
+                    if (blockIndex == trailerBlock) continue
+                    dataBlocks.add(blockIndex)
+                }
+            }
+
+            val capacity = dataBlocks.size * 16
+            if (tlv.size > capacity) {
+                return "NDEF写入失败：M1映射容量不足（需要${tlv.size}字节，最大${capacity}字节）"
+            }
+
+            val usedBlocks = ArrayList<Int>()
+            val skippedBlocks = ArrayList<Int>()
+            var writeOffset = 0
+            for (blockIndex in dataBlocks) {
+                if (writeOffset >= tlv.size) break
+                val blockData = ByteArray(16) { 0x00.toByte() }
+                val copyLen = minOf(16, tlv.size - writeOffset)
+                System.arraycopy(tlv, writeOffset, blockData, 0, copyLen)
+                if (!writeBlockWithRetry(mifare, blockIndex, blockData)) {
+                    skippedBlocks.add(blockIndex)
+                    continue
+                }
+                usedBlocks.add(blockIndex)
+                writeOffset += copyLen
+            }
+            if (writeOffset < tlv.size) {
+                val remain = tlv.size - writeOffset
+                return "NDEF写入失败：M1映射可写区块不足，剩余 $remain 字节未写入"
+            }
+
+            val readBack = ByteArray(tlv.size)
+            var readOffset = 0
+            for (blockIndex in usedBlocks) {
+                if (readOffset >= tlv.size) break
+                val block = readBlockWithRetry(mifare, blockIndex)
+                    ?: return "NDEF写入失败：M1映射校检读取区块 $blockIndex 失败"
+                val copyLen = minOf(16, tlv.size - readOffset)
+                System.arraycopy(block, 0, readBack, readOffset, copyLen)
+                readOffset += copyLen
+            }
+            if (!readBack.contentEquals(tlv)) {
+                return "NDEF写入失败：M1映射写入后校检不一致"
+            }
+            if (skippedBlocks.isEmpty()) {
+                "NDEF写入成功：已通过 MIFARE Classic 映射写入并校检（FF秘钥）"
+            } else {
+                "NDEF写入成功：已通过 MIFARE Classic 映射写入并校检（FF秘钥，跳过不可写区块 ${skippedBlocks.joinToString(",")}）"
+            }
+        } catch (e: Exception) {
+            "NDEF写入失败：M1映射异常 ${e.message.orEmpty()}"
+        }
+    }
+
+    private fun buildNdefTlv(payload: ByteArray): ByteArray {
+        if (payload.size <= 0xFE) {
+            return ByteArray(payload.size + 3).apply {
+                this[0] = 0x03.toByte()
+                this[1] = payload.size.toByte()
+                System.arraycopy(payload, 0, this, 2, payload.size)
+                this[lastIndex] = 0xFE.toByte()
+            }
+        }
+        return ByteArray(payload.size + 5).apply {
+            this[0] = 0x03.toByte()
+            this[1] = 0xFF.toByte()
+            this[2] = ((payload.size shr 8) and 0xFF).toByte()
+            this[3] = (payload.size and 0xFF).toByte()
+            System.arraycopy(payload, 0, this, 4, payload.size)
+            this[lastIndex] = 0xFE.toByte()
+        }
+    }
+
+    private fun buildNdefMessage(request: NdefWriteRequest): NdefMessage {
+        val record = when (request.type) {
+            NdefWriteType.TEXT -> {
+                NdefRecord.createTextRecord("zh", request.textContent.trim())
+            }
+            NdefWriteType.URL -> {
+                val raw = request.url.trim()
+                val normalized = if (
+                    raw.startsWith("http://", ignoreCase = true) ||
+                    raw.startsWith("https://", ignoreCase = true)
+                ) raw else "https://$raw"
+                NdefRecord.createUri(Uri.parse(normalized))
+            }
+            NdefWriteType.PHONE -> {
+                val raw = request.phone.trim()
+                val normalized = if (raw.startsWith("tel:", ignoreCase = true)) raw else "tel:$raw"
+                NdefRecord.createUri(Uri.parse(normalized))
+            }
+            NdefWriteType.WIFI -> {
+                val security = request.wifiSecurity.trim().uppercase(Locale.US).ifBlank { "WPA" }
+                val ssid = escapeWifiField(request.wifiSsid.trim())
+                val password = escapeWifiField(request.wifiPassword.trim())
+                val wifiText = buildString {
+                    append("WIFI:")
+                    append("T:").append(security).append(';')
+                    append("S:").append(ssid).append(';')
+                    if (password.isNotEmpty()) {
+                        append("P:").append(password).append(';')
+                    }
+                    append(';')
+                }
+                NdefRecord.createTextRecord("en", wifiText)
+            }
+        }
+        return NdefMessage(arrayOf(record))
+    }
+
+    private fun escapeWifiField(value: String): String {
+        return value
+            .replace("\\", "\\\\")
+            .replace(";", "\\;")
+            .replace(",", "\\,")
+            .replace(":", "\\:")
+            .replace("\"", "\\\"")
     }
 
     private fun verifyTagAgainstDump(tag: Tag, item: ShareTagItem): String {

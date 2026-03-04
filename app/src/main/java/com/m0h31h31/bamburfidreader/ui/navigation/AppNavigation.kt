@@ -33,6 +33,8 @@ import com.m0h31h31.bamburfidreader.ui.screens.ReaderScreen
 import com.m0h31h31.bamburfidreader.ui.screens.TagScreen
 import com.m0h31h31.bamburfidreader.ui.screens.MiscScreen
 import com.m0h31h31.bamburfidreader.ui.screens.DataScreen
+import com.m0h31h31.bamburfidreader.ui.screens.NdefWriteRequest
+import com.m0h31h31.bamburfidreader.ui.screens.WriteScreen
 import com.m0h31h31.bamburfidreader.utils.ConfigManager
 
 private data class TopDestination(
@@ -82,12 +84,14 @@ fun AppNavigation(
     shareLoading: Boolean,
     shareRefreshStatusMessage: String,
     writeStatusMessage: String,
+    writeToolStatusMessage: String,
     writeInProgress: Boolean,
     onTagScreenEnter: () -> Unit,
     onRefreshShareFiles: () -> String,
     onStartWriteTag: (ShareTagItem) -> Unit,
     onDeleteTagItem: (ShareTagItem) -> String,
-    onCancelWriteTag: () -> Unit
+    onCancelWriteTag: () -> Unit,
+    onStartNdefWrite: (NdefWriteRequest) -> String
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()

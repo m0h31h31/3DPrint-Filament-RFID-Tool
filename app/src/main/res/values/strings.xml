@@ -12,6 +12,7 @@
     <string name="tab_reader">Scan</string>
     <string name="tab_inventory">Inventory</string>
     <string name="tab_data">Data</string>
+    <string name="tab_write">Write</string>
     <string name="tab_tag">Copy</string>
     <string name="tab_misc">Misc</string>
 
