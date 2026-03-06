@@ -1,58 +1,67 @@
 package com.m0h31h31.bamburfidreader.ui.theme
 
-import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
+private val ColorError = Coral.copy(alpha = 0.95f)
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+    primary = Ocean,
+    onPrimary = Mist,
+    secondary = Mint,
+    tertiary = Coral,
+    background = Mist,
+    surface = Frost,
+    surfaceVariant = Cloud,
+    onBackground = Ink,
+    onSurface = Ink,
+    onSurfaceVariant = Steel,
+    outline = Cloud,
+    outlineVariant = Steel.copy(alpha = 0.45f),
+    error = ColorError,
+    errorContainer = Coral.copy(alpha = 0.18f),
+    onErrorContainer = Ink
+)
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+private val DarkColorScheme = darkColorScheme(
+    primary = DarkOcean,
+    onPrimary = DarkMist,
+    secondary = Mint,
+    background = DarkMist,
+    surface = DarkFrost,
+    surfaceVariant = DarkCloud,
+    onBackground = DarkInk,
+    onSurface = DarkInk,
+    onSurfaceVariant = DarkSteel,
+    outline = DarkCloud,
+    outlineVariant = DarkSteel.copy(alpha = 0.35f),
+    error = ColorError
+)
+
+private val AppShapes = Shapes(
+    extraSmall = RoundedCornerShape(14.dp),
+    small = RoundedCornerShape(18.dp),
+    medium = RoundedCornerShape(24.dp),
+    large = RoundedCornerShape(30.dp),
+    extraLarge = RoundedCornerShape(36.dp)
 )
 
 @Composable
 fun BambuRfidReaderTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    darkTheme: Boolean = false,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
+    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = AppShapes,
         content = content
     )
 }

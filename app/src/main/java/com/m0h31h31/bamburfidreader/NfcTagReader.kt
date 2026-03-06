@@ -16,6 +16,7 @@ private const val SECTOR_COUNT = 16
 private const val INTER_BLOCK_DELAY_MS = 0L    // 想更稳可设 5~10；追求极致速度保持 0
 private const val AUTH_RETRY_COUNT = 2          // 认证失败重试次数（总尝试=1+重试）
 private const val READ_BLOCK_RETRY_COUNT = 1    // 单块读失败重试次数
+private const val RECONNECT_DELAY_MS = 35L
 
 // Bambu RFID 的密钥派生固定盐值。
 private val HKDF_SALT = byteArrayOf(
@@ -161,10 +162,11 @@ object NfcTagReader {
                 }
             }
 
+            val targetSectorCount = minOf(SECTOR_COUNT, mifare.sectorCount)
             val sectorsToRead = if (readAllSectors) {
-                0 until SECTOR_COUNT
+                0 until targetSectorCount
             } else {
-                0..4
+                0..minOf(4, targetSectorCount - 1)
             }
 
             for (sector in sectorsToRead) {
@@ -260,6 +262,7 @@ private fun readSectorOptimized(
             } catch (e: Exception) {
                 lastError = e
                 // 读失败后按 MCReader 思路重认证一次再重试。
+                reconnectMifareClassic(mifare)
                 val reAuthOk = authenticateSectorWithRetry(
                     mifare = mifare,
                     sectorIndex = sectorIndex,
@@ -297,10 +300,25 @@ private fun authenticateSectorWithRetry(
             val okB = keyB != null && mifare.authenticateSectorWithKeyB(sectorIndex, keyB)
             if (okB) return true
         } catch (_: Exception) {
-            // Ignore and retry.
+            reconnectMifareClassic(mifare)
         }
     }
     return false
+}
+
+private fun reconnectMifareClassic(mifare: MifareClassic): Boolean {
+    return try {
+        try {
+            mifare.close()
+        } catch (_: Exception) {
+        }
+        Thread.sleep(RECONNECT_DELAY_MS)
+        mifare.connect()
+        Thread.sleep(RECONNECT_DELAY_MS)
+        true
+    } catch (_: Exception) {
+        false
+    }
 }
 
 /**

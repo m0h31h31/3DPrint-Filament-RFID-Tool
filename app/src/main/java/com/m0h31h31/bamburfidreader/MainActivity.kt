@@ -78,6 +78,9 @@ private const val WRITE_SECTOR_COUNT = 16
 private const val RW_AUTH_RETRY_COUNT = 2
 private const val RW_BLOCK_RETRY_COUNT = 1
 private const val WRITE_RESUME_MAX_ATTEMPTS = 3
+private const val RW_RECONNECT_DELAY_MS = 35L
+private const val UI_PREFS_NAME = "ui_prefs"
+private const val KEY_VOICE_ENABLED = "voice_enabled"
 private val WRITE_HKDF_SALT = byteArrayOf(
     0x9a.toByte(), 0x75.toByte(), 0x9c.toByte(), 0xf2.toByte(),
     0xc4.toByte(), 0xf7.toByte(), 0xca.toByte(), 0xff.toByte(),
@@ -488,6 +491,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val uiPrefs = getSharedPreferences(UI_PREFS_NAME, Context.MODE_PRIVATE)
+        voiceEnabled = uiPrefs.getBoolean(KEY_VOICE_ENABLED, false)
         LogCollector.init(this)
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
         filamentDbHelper = FilamentDbHelper(this)
@@ -519,6 +524,7 @@ class MainActivity : ComponentActivity() {
                     ttsLanguageReady = ttsLanguageReady,
                     onVoiceEnabledChange = {
                         voiceEnabled = it
+                        uiPrefs.edit().putBoolean(KEY_VOICE_ENABLED, it).apply()
                         if (!it) {
                             tts?.stop()
                         } else if (!ttsReady) {
@@ -605,7 +611,7 @@ class MainActivity : ComponentActivity() {
                     onCancelWriteTag = {
                         pendingWriteItem = null
                         pendingVerifyItem = null
-                        writeStatusMessage = "已取消写入任务"
+                        writeStatusMessage = "已离开复制页，写入任务已停止"
                     },
                     onStartNdefWrite = { request ->
                         enqueueNdefWriteTask(request)
@@ -1466,12 +1472,13 @@ class MainActivity : ComponentActivity() {
         }
 
         val ffKey = ByteArray(6) { 0xFF.toByte() }
+        val targetSectorCount = minOf(WRITE_SECTOR_COUNT, mifare.sectorCount)
 
         return try {
             var resumePoint = WriteResumePoint(sector = 0, blockOffset = 0)
             var recoverAttempts = 0
 
-            while (resumePoint.sector < WRITE_SECTOR_COUNT) {
+            while (resumePoint.sector < targetSectorCount) {
                 try {
                     if (!mifare.isConnected) {
                         mifare.connect()
@@ -1499,7 +1506,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    for (sector in resumePoint.sector until WRITE_SECTOR_COUNT) {
+                    for (sector in resumePoint.sector until targetSectorCount) {
                         val trailerIndex = sector * 4 + 3
                         val trailerData = sourceBlocks.getOrNull(trailerIndex)
                         val sourceKeyA = if (trailerData != null && trailerData.size == 16) {
@@ -1545,7 +1552,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     // 全部写完，跳出 while。
-                    resumePoint = WriteResumePoint(WRITE_SECTOR_COUNT, 0)
+                    resumePoint = WriteResumePoint(targetSectorCount, 0)
                 } catch (e: Exception) {
                     recoverAttempts++
                     try {
@@ -1559,7 +1566,7 @@ class MainActivity : ComponentActivity() {
                     if (detected == null) {
                         return "写入失败：中断后无法定位断点"
                     }
-                    if (detected.sector >= WRITE_SECTOR_COUNT) {
+                    if (detected.sector >= targetSectorCount) {
                         // 探测到全卡已是目标内容，视为成功。
                         return "写入成功：断线后校验断点显示已完成全部写入"
                     }
@@ -1600,6 +1607,7 @@ class MainActivity : ComponentActivity() {
         val ffKey = ByteArray(6) { 0xFF.toByte() }
         val zeroBlock = ByteArray(16) { 0x00.toByte() }
         val accessDefault = hexToBytes("FF078069")
+        val targetSectorCount = minOf(WRITE_SECTOR_COUNT, mifare.sectorCount)
 
         fun logStep(message: String) {
             logDebug("格式化标签: $message")
@@ -1703,7 +1711,7 @@ class MainActivity : ComponentActivity() {
             logStep("块0读取成功（用于最终校验）")
 
             fun runStep3VerifyByFf(): String? {
-                for (sector in 0 until WRITE_SECTOR_COUNT) {
+                for (sector in 0 until targetSectorCount) {
                     logStep("步骤3/3 扇区$sector: 使用FF秘钥校验")
                     val authOk = authenticateSectorWithRetry(
                         mifare = mifare,
@@ -1742,7 +1750,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 // 第一步：使用派生秘钥将所有 trailer 重置为默认 FF trailer（优先KeyB，兼容用KeyA）
-                for (sector in 0 until WRITE_SECTOR_COUNT) {
+                for (sector in 0 until targetSectorCount) {
                     logStep("步骤1/3 扇区$sector: 开始重置 trailer")
                     val authByDerived = authenticateSectorWithRetry(
                         mifare = mifare,
@@ -1773,7 +1781,7 @@ class MainActivity : ComponentActivity() {
                 logStep("已重置全部 trailer（以FF或派生秘钥可继续认证为准）")
 
                 // 第二步：使用 FF/派生秘钥，将数据区块清零（不清 block0，不清 trailer）
-                for (sector in 0 until WRITE_SECTOR_COUNT) {
+                for (sector in 0 until targetSectorCount) {
                     logStep("步骤2/3 扇区$sector: 使用FF认证并清零区块")
                     val authOk = authenticateSectorWithRetry(
                         mifare = mifare,
@@ -2009,7 +2017,8 @@ class MainActivity : ComponentActivity() {
         return try {
             mifare.connect()
             val readBackBlocks = MutableList<ByteArray?>(64) { null }
-            for (sector in 0 until 16) {
+            val targetSectorCount = minOf(WRITE_SECTOR_COUNT, mifare.sectorCount)
+            for (sector in 0 until targetSectorCount) {
                 val trailerIndex = sector * 4 + 3
                 val trailerData = sourceBlocks.getOrNull(trailerIndex)
                     ?: return "校验失败：扇区 $sector trailer 缺失"
@@ -2087,7 +2096,8 @@ class MainActivity : ComponentActivity() {
         val mifare = MifareClassic.get(tag) ?: return null
         return try {
             mifare.connect()
-            for (sector in 0 until WRITE_SECTOR_COUNT) {
+            val targetSectorCount = minOf(WRITE_SECTOR_COUNT, mifare.sectorCount)
+            for (sector in 0 until targetSectorCount) {
                 val trailerIndex = sector * 4 + 3
                 val trailerData = sourceBlocks.getOrNull(trailerIndex) ?: return WriteResumePoint(sector, 0)
                 if (trailerData.size != 16) return WriteResumePoint(sector, 0)
@@ -2117,7 +2127,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            WriteResumePoint(WRITE_SECTOR_COUNT, 0)
+            WriteResumePoint(targetSectorCount, 0)
         } catch (_: Exception) {
             null
         } finally {
@@ -2142,7 +2152,8 @@ class MainActivity : ComponentActivity() {
         var resumePoint: WriteResumePoint? = null
         var matchedAnyBlock = false
 
-        for (sector in 0 until WRITE_SECTOR_COUNT) {
+        val targetSectorCount = minOf(WRITE_SECTOR_COUNT, mifare.sectorCount)
+        for (sector in 0 until targetSectorCount) {
             val trailerIndex = sector * 4 + 3
             val trailerData = sourceBlocks.getOrNull(trailerIndex)
                 ?: return WritePrecheckResult(
@@ -2284,6 +2295,9 @@ class MainActivity : ComponentActivity() {
     ): Boolean {
         for (attempt in 0..RW_AUTH_RETRY_COUNT) {
             try {
+                if (!ensureMifareClassicConnected(mifare)) {
+                    continue
+                }
                 keysA.forEach { key ->
                     if (key != null && mifare.authenticateSectorWithKeyA(sectorIndex, key)) {
                         return true
@@ -2295,7 +2309,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             } catch (_: Exception) {
-                // Ignore and retry.
+                reconnectMifareClassic(mifare)
             }
         }
         return false
@@ -2308,10 +2322,13 @@ class MainActivity : ComponentActivity() {
     ): Boolean {
         for (attempt in 0..RW_BLOCK_RETRY_COUNT) {
             try {
+                if (!ensureMifareClassicConnected(mifare)) {
+                    continue
+                }
                 mifare.writeBlock(blockIndex, data)
                 return true
             } catch (_: Exception) {
-                // Ignore and retry.
+                reconnectMifareClassic(mifare)
             }
         }
         return false
@@ -2323,6 +2340,9 @@ class MainActivity : ComponentActivity() {
     ): ByteArray? {
         for (attempt in 0..RW_BLOCK_RETRY_COUNT) {
             try {
+                if (!ensureMifareClassicConnected(mifare)) {
+                    continue
+                }
                 val raw = mifare.readBlock(blockIndex)
                 return when {
                     raw.size == 16 -> raw
@@ -2330,10 +2350,33 @@ class MainActivity : ComponentActivity() {
                     else -> null
                 }
             } catch (_: Exception) {
-                // Ignore and retry.
+                reconnectMifareClassic(mifare)
             }
         }
         return null
+    }
+
+    private fun ensureMifareClassicConnected(mifare: MifareClassic): Boolean {
+        return if (mifare.isConnected) {
+            true
+        } else {
+            reconnectMifareClassic(mifare)
+        }
+    }
+
+    private fun reconnectMifareClassic(mifare: MifareClassic): Boolean {
+        return try {
+            try {
+                mifare.close()
+            } catch (_: Exception) {
+            }
+            Thread.sleep(RW_RECONNECT_DELAY_MS)
+            mifare.connect()
+            Thread.sleep(RW_RECONNECT_DELAY_MS)
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun deriveWriteKeys(uid: ByteArray, info: ByteArray): List<ByteArray> {

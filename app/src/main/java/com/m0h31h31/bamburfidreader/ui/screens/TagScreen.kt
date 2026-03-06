@@ -1,6 +1,5 @@
 package com.m0h31h31.bamburfidreader.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
@@ -30,11 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -47,6 +42,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
 import com.m0h31h31.bamburfidreader.ui.components.ColorSwatch
+import com.m0h31h31.bamburfidreader.ui.components.NeuButton
+import com.m0h31h31.bamburfidreader.ui.components.NeuPanel
+import com.m0h31h31.bamburfidreader.ui.components.NeuTextField
+import com.m0h31h31.bamburfidreader.ui.components.neuBackground
+
+private val tagItemShape = RoundedCornerShape(24.dp)
 
 private fun uidDisplayName(fileName: String): String = fileName.removeSuffix(".txt")
 
@@ -134,37 +135,31 @@ fun TagScreen(
     val selectedItem = items.firstOrNull { it.relativePath == selectedFileName }
 
     Surface(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().neuBackground(),
         color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = stringResource(R.string.tab_tag),
-                style = MaterialTheme.typography.titleLarge
-            )
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(
+                NeuTextField(
                     value = query,
                     onValueChange = { query = it },
-                    singleLine = true,
-                    label = { Text("按耗材/颜色筛选(支持 pla红)") },
+                    label = "按耗材/颜色筛选(支持 pla红)",
                     modifier = Modifier.weight(1f)
                 )
-                Button(
+                NeuButton(
+                    text = "刷新",
                     onClick = { hintMessage = onRefresh() },
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    Text("刷新")
-                }
+                    modifier = Modifier.width(88.dp)
+                )
             }
 
             if (hintMessage.isNotBlank()) {
@@ -187,18 +182,18 @@ fun TagScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Card(
+            NeuPanel(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(0.26f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    .weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp)
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(filteredItems, key = { it.relativePath }) { item ->
                             val selected = item.relativePath == selectedFileName
@@ -218,8 +213,8 @@ fun TagScreen(
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .padding(vertical = 6.dp)
-                                            .clip(RoundedCornerShape(12.dp))
+                                            .padding(vertical = 3.dp)
+                                            .clip(tagItemShape)
                                             .background(Color(0xFFE54D4D))
                                             .padding(horizontal = 16.dp),
                                         contentAlignment = Alignment.CenterEnd
@@ -233,20 +228,17 @@ fun TagScreen(
                                     }
                                 }
                             ) {
-                                Card(
+                                NeuPanel(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable { selectedFileName = item.relativePath },
-                                    border = if (selected) {
-                                        BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-                                    } else {
-                                        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                    }
+                                    shape = tagItemShape,
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                                 ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                            .padding(horizontal = 10.dp, vertical = 7.dp),
                                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
@@ -295,14 +287,12 @@ fun TagScreen(
                 }
             }
 
-            HorizontalDivider()
-
-            Card(
+            NeuPanel(
                 modifier = Modifier.fillMaxWidth(),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(9.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    modifier = Modifier,
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
@@ -340,12 +330,11 @@ fun TagScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
             if (selectedItem != null) {
                 Text(
                     text = "当前选择: ${uidDisplayName(selectedItem.fileName)}",
-                    fontSize = 12.sp
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -380,9 +369,11 @@ fun TagScreen(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Button(
+                NeuButton(
+                    text = "开始写入",
                     onClick = {
                         val item = selectedItem
                         if (item != null) {
@@ -393,16 +384,13 @@ fun TagScreen(
                     },
                     enabled = !writeInProgress && selectedItem != null,
                     modifier = Modifier.weight(1f)
-                ) {
-                    Text("开始写入")
-                }
-                TextButton(
+                )
+                NeuButton(
+                    text = "取消写入",
                     onClick = onCancelWrite,
                     enabled = writeInProgress,
                     modifier = Modifier.weight(1f)
-                ) {
-                    Text("取消写入")
-                }
+                )
             }
 
             if (writeStatusMessage.isNotBlank()) {

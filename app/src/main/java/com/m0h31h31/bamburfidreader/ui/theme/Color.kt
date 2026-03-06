@@ -2,10 +2,18 @@ package com.m0h31h31.bamburfidreader.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+val Mist = Color(0xFFFBFCFE)
+val Frost = Color(0xFFF3F6FB)
+val Cloud = Color(0xFFE5EBF3)
+val Steel = Color(0xFF90A0B3)
+val Ink = Color(0xFF2B3440)
+val Ocean = Color(0xFF5B7CFA)
+val Mint = Color(0xFF7DC9B4)
+val Coral = Color(0xFFEA8F7A)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val DarkMist = Color(0xFF1C2128)
+val DarkFrost = Color(0xFF242B34)
+val DarkCloud = Color(0xFF2F3945)
+val DarkSteel = Color(0xFF97A3B3)
+val DarkInk = Color(0xFFE8EEF6)
+val DarkOcean = Color(0xFF8DA7FF)

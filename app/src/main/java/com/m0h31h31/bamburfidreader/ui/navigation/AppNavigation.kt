@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -16,18 +17,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
 import com.m0h31h31.bamburfidreader.NfcUiState
 import com.m0h31h31.bamburfidreader.R
 import com.m0h31h31.bamburfidreader.FilamentDbHelper
 import com.m0h31h31.bamburfidreader.ShareTagItem
+import com.m0h31h31.bamburfidreader.ui.components.NeuPanel
+import com.m0h31h31.bamburfidreader.ui.components.neuBackground
 import com.m0h31h31.bamburfidreader.ui.screens.InventoryScreen
 import com.m0h31h31.bamburfidreader.ui.screens.ReaderScreen
 import com.m0h31h31.bamburfidreader.ui.screens.TagScreen
@@ -96,6 +98,12 @@ fun AppNavigation(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    LaunchedEffect(currentRoute, writeInProgress) {
+        if (currentRoute != "tag" && writeInProgress) {
+            onCancelWriteTag()
+        }
+    }
     
     // 支持外部触发跳转到 tag / reader
     if (navigateToTag && currentRoute != "tag") {
@@ -117,27 +125,38 @@ fun AppNavigation(
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .neuBackground(),
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface
+            NeuPanel(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .navigationBarsPadding(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(4.dp)
             ) {
-                topDestinations.forEach { destination ->
-                    val selected = currentRoute == destination.route
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            navController.navigate(destination.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp
+                ) {
+                    topDestinations.forEach { destination ->
+                        val selected = currentRoute == destination.route
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                navController.navigate(destination.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Box(modifier = Modifier.size(0.dp)) },
-                        label = { Text(text = stringResource(destination.labelRes)) }
-                    )
+                            },
+                            icon = { Box(modifier = Modifier.size(0.dp)) },
+                            label = { Text(text = stringResource(destination.labelRes)) }
+                        )
+                    }
                 }
             }
         }

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import android.widget.Toast
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -20,6 +19,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.clickable
@@ -53,7 +55,11 @@ import com.m0h31h31.bamburfidreader.logDebug
 import com.m0h31h31.bamburfidreader.openTtsSettings
 import com.m0h31h31.bamburfidreader.ui.components.ColorSwatch
 import com.m0h31h31.bamburfidreader.ui.components.InfoLine
+import com.m0h31h31.bamburfidreader.ui.components.NeuButton
+import com.m0h31h31.bamburfidreader.ui.components.NeuPanel
+import com.m0h31h31.bamburfidreader.ui.components.neuBackground
 import com.m0h31h31.bamburfidreader.ui.theme.BambuRfidReaderTheme
+import com.m0h31h31.bamburfidreader.util.parseColorValue
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -76,28 +82,37 @@ fun ReaderScreen(
     var logoTapCount by remember { mutableStateOf(0) }
     var logoLastTapAt by remember { mutableStateOf(0L) }
     var showOutboundConfirm by remember(state.trayUidHex) { mutableStateOf(false) }
+    val baseLogoTint = state.displayColors.firstNotNullOfOrNull { parseColorValue(it) }
+        ?: parseColorValue(state.displayColorCode)
+        ?: MaterialTheme.colorScheme.onSurfaceVariant
+    val logoTintColor = if (baseLogoTint.alpha < 0.45f) {
+        baseLogoTint.copy(alpha = 0.75f)
+    } else {
+        baseLogoTint
+    }
+    val animatedLogoTintColor by animateColorAsState(
+        targetValue = logoTintColor,
+        animationSpec = tween(durationMillis = 550),
+        label = "reader_logo_tint"
+    )
     Surface(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().neuBackground(),
         color = MaterialTheme.colorScheme.background
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
                     .padding(bottom = 0.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.tab_reader),
-                    style = MaterialTheme.typography.titleLarge
-                )
                 if (state.status.isNotBlank()) {
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    NeuPanel(modifier = Modifier.fillMaxWidth()) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(15.dp,5.dp),
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
@@ -197,11 +212,11 @@ fun ReaderScreen(
                 val debounceJob = remember {
                     mutableStateOf<Job?>(null)
                 }
-                Card(modifier = Modifier.fillMaxWidth()) {
+                NeuPanel(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp),
+                            .padding(10.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
@@ -254,7 +269,7 @@ fun ReaderScreen(
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .padding(start = 16.dp),
+                                    .padding(start = 12.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
@@ -419,12 +434,11 @@ fun ReaderScreen(
                     }
                 }
                 if (showRecoveryAction) {
-                    Button(
+                    NeuButton(
+                        text = "尝试修复",
                         onClick = onAttemptRecovery,
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(text = "尝试修复")
-                    }
+                    )
                 }
                 if (showOutboundConfirm) {
                     AlertDialog(
@@ -479,11 +493,11 @@ fun ReaderScreen(
 
 //                if (state.secondaryFields.isNotEmpty()) {
                 if (true) {
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    NeuPanel(modifier = Modifier.fillMaxWidth()) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(
@@ -497,19 +511,22 @@ fun ReaderScreen(
                                 InfoLine(
                                     label = "卡UID",
                                     value = state.uidHex.ifBlank { "-" },
-                                    style = MaterialTheme.typography.bodySmall
+                                    style = MaterialTheme.typography.bodySmall,
+                                    inline = true
                                 )
                                 state.secondaryFields.forEach { field ->
                                     InfoLine(
                                         label = field.label,
                                         value = field.value,
-                                        style = MaterialTheme.typography.bodySmall
+                                        style = MaterialTheme.typography.bodySmall,
+                                        inline = true
                                     )
                                 }
                             }
                             androidx.compose.foundation.Image(
                                 painter = painterResource(id = R.drawable.logo_mark),
                                 contentDescription = stringResource(R.string.content_logo),
+                                colorFilter = ColorFilter.tint(animatedLogoTintColor),
                                 modifier = Modifier.size(80.dp, 250.dp)
                             )
                         }

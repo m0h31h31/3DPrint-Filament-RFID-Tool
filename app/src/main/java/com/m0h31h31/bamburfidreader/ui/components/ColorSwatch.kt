@@ -2,6 +2,7 @@ package com.m0h31h31.bamburfidreader.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -13,8 +14,35 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.m0h31h31.bamburfidreader.util.parseColorValue
+import kotlin.math.roundToInt
+
+private fun needsCheckerboard(colors: List<Color>): Boolean {
+    return colors.any { it.alpha < 1f }
+}
+
+@Composable
+private fun CheckerboardBackground(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val tileSize = 6.dp.toPx()
+        if (tileSize <= 0f) return@Canvas
+        val columns = (size.width / tileSize).roundToInt() + 1
+        val rows = (size.height / tileSize).roundToInt() + 1
+        val light = Color(0xFFF5F5F5)
+        val dark = Color(0xFFE1E1E1)
+        for (y in 0 until rows) {
+            for (x in 0 until columns) {
+                drawRect(
+                    color = if ((x + y) % 2 == 0) light else dark,
+                    topLeft = Offset(x * tileSize, y * tileSize),
+                    size = androidx.compose.ui.geometry.Size(tileSize, tileSize)
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun ColorSwatch(
@@ -34,23 +62,36 @@ fun ColorSwatch(
         else -> "单色"
     }
     val shape = RoundedCornerShape(14.dp)
+    val showCheckerboard = needsCheckerboard(colors)
 
     when (resolvedType) {
         "渐变色" -> {
             Box(
                 modifier = modifier
+                    .neuCard(shape = shape)
                     .clip(shape)
-                    .background(Brush.horizontalGradient(colors))
-                    .border(1.dp, MaterialTheme.colorScheme.outline, shape)
-            )
+                    .border(1.dp, Color.White.copy(alpha = 0.65f), shape)
+            ) {
+                if (showCheckerboard) {
+                    CheckerboardBackground(modifier = Modifier.fillMaxSize())
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Brush.horizontalGradient(colors))
+                )
+            }
         }
 
         "多拼色" -> {
             Box(
                 modifier = modifier
                     .clip(shape)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, shape)
+                    .neuCard(shape = shape)
             ) {
+                if (showCheckerboard) {
+                    CheckerboardBackground(modifier = Modifier.fillMaxSize())
+                }
                 Row(modifier = Modifier.fillMaxSize()) {
                     colors.forEach { color ->
                         Box(
@@ -67,10 +108,19 @@ fun ColorSwatch(
         else -> {
             Box(
                 modifier = modifier
+                    .neuCard(shape = shape)
                     .clip(shape)
-                    .background(colors.firstOrNull() ?: Color.Transparent)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, shape)
-            )
+                    .border(1.dp, Color.White.copy(alpha = 0.65f), shape)
+            ) {
+                if (showCheckerboard) {
+                    CheckerboardBackground(modifier = Modifier.fillMaxSize())
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(colors.firstOrNull() ?: Color.Transparent)
+                )
+            }
         }
     }
 }

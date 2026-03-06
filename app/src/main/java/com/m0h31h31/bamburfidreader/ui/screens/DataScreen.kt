@@ -1,12 +1,25 @@
 package com.m0h31h31.bamburfidreader.ui.screens
 
-import androidx.compose.foundation.layout.*
+import android.content.Context
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Canvas
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -16,27 +29,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import com.m0h31h31.bamburfidreader.FilamentDbHelper
 import com.m0h31h31.bamburfidreader.InventoryItem
 import com.m0h31h31.bamburfidreader.ui.components.ColorSwatch
+import com.m0h31h31.bamburfidreader.ui.components.NeuPanel
+import com.m0h31h31.bamburfidreader.ui.components.neuBackground
 import com.m0h31h31.bamburfidreader.util.parseColorValue
-import androidx.compose.foundation.layout.FlowRow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.ui.geometry.Offset
 import kotlin.math.roundToInt
 
 private data class StackedColorGroup(
@@ -68,43 +81,27 @@ private fun colorSortValue(item: InventoryItem): Long {
     return raw.toLongOrNull(16) ?: Long.MAX_VALUE
 }
 
-// 计算颜色亮度，返回值范围0-1，值越大越亮
-private fun calculateBrightness(color: androidx.compose.ui.graphics.Color): Float {
-    // 使用相对亮度公式：L = 0.2126 * R + 0.7152 * G + 0.0722 * B
-    val r = color.red
-    val g = color.green
-    val b = color.blue
-    return 0.2126f * r + 0.7152f * g + 0.0722f * b
+private fun calculateBrightness(color: Color): Float {
+    return 0.2126f * color.red + 0.7152f * color.green + 0.0722f * color.blue
 }
 
-// 根据背景颜色获取合适的文字颜色
-private fun getTextColorForBackground(colorValues: List<String>, colorCode: String): androidx.compose.ui.graphics.Color {
-    // 优先取第一个颜色，用 RGB 亮度决定文本颜色
+private fun getTextColorForBackground(colorValues: List<String>, colorCode: String): Color {
     val firstColor = if (colorValues.isNotEmpty()) {
         parseColorValue(colorValues[0].trim())
     } else {
         parseColorValue(colorCode.trim())
     }
-
     if (firstColor != null) {
-        // 透明度超过 50%（alpha <= 0.5）时，强制使用黑色文字。
-        if (firstColor.alpha <= 0.5f) {
-            return Color.Black
-        }
-        val brightness = calculateBrightness(firstColor)
-        return if (brightness < 0.5f) Color.White else Color.Black
+        if (firstColor.alpha <= 0.5f) return Color.Black
+        return if (calculateBrightness(firstColor) < 0.5f) Color.White else Color.Black
     }
     return Color.Black
 }
 
 private fun needsCheckerboardBackground(colorValues: List<String>, colorCode: String): Boolean {
     val candidates = if (colorValues.isNotEmpty()) colorValues else listOf(colorCode)
-    if (candidates.isEmpty()) return false
     return candidates.any { raw ->
-        val value = raw.trim()
-        if (value.isEmpty()) return@any false
-        val alpha = parseColorValue(value)?.alpha ?: 1f
-        // 只给半透明显示棋盘格；完全透明/完全不透明都不显示。
+        val alpha = parseColorValue(raw.trim())?.alpha ?: 1f
         alpha < 1f
     }
 }
@@ -116,13 +113,12 @@ private fun TransparencyCheckerboard(modifier: Modifier = Modifier) {
         if (tileSize <= 0f) return@Canvas
         val columns = (size.width / tileSize).roundToInt() + 1
         val rows = (size.height / tileSize).roundToInt() + 1
-        val light = Color(0xFFF2F2F2)
-        val dark = Color(0xFFD5D5D5)
+        val light = Color(0xFFF6F6F6)
+        val dark = Color(0xFFE1E1E1)
         for (y in 0 until rows) {
             for (x in 0 until columns) {
-                val color = if ((x + y) % 2 == 0) light else dark
                 drawRect(
-                    color = color,
+                    color = if ((x + y) % 2 == 0) light else dark,
                     topLeft = Offset(x * tileSize, y * tileSize),
                     size = androidx.compose.ui.geometry.Size(tileSize, tileSize)
                 )
@@ -132,65 +128,68 @@ private fun TransparencyCheckerboard(modifier: Modifier = Modifier) {
 }
 
 private val swatchShape = RoundedCornerShape(14.dp)
+private const val DATA_SCREEN_PREFS = "data_screen_prefs"
+private const val KEY_USE_DETAILED_CLASSIFICATION = "use_detailed_classification"
+private const val KEY_MERGE_SAME_COLOR_ITEMS = "merge_same_color_items"
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
-    val inventoryItems = remember { mutableStateOf<List<InventoryItem>>(emptyList()) }
+    val context = LocalContext.current
+    val prefs = remember(context) {
+        context.getSharedPreferences(DATA_SCREEN_PREFS, Context.MODE_PRIVATE)
+    }
     val groupedItems = remember { mutableStateOf(mapOf<String, List<InventoryItem>>()) }
     val isLoading = remember { mutableStateOf(true) }
-    val useDetailedClassification = remember { mutableStateOf(false) }
-    val mergeSameColorItems = remember { mutableStateOf(false) }
+    val useDetailedClassification = remember {
+        mutableStateOf(prefs.getBoolean(KEY_USE_DETAILED_CLASSIFICATION, false))
+    }
+    val mergeSameColorItems = remember {
+        mutableStateOf(prefs.getBoolean(KEY_MERGE_SAME_COLOR_ITEMS, false))
+    }
     val activeStackDialog = remember { mutableStateOf<StackedColorGroup?>(null) }
+
+    LaunchedEffect(useDetailedClassification.value) {
+        prefs.edit().putBoolean(
+            KEY_USE_DETAILED_CLASSIFICATION,
+            useDetailedClassification.value
+        ).apply()
+    }
+
+    LaunchedEffect(mergeSameColorItems.value) {
+        prefs.edit().putBoolean(
+            KEY_MERGE_SAME_COLOR_ITEMS,
+            mergeSameColorItems.value
+        ).apply()
+    }
 
     LaunchedEffect(dbHelper, useDetailedClassification.value) {
         val db = dbHelper?.readableDatabase
         if (db != null) {
-            val items = withContext(Dispatchers.IO) {
-                dbHelper.getAllInventory(db)
-            }
-            inventoryItems.value = items
+            val items = withContext(Dispatchers.IO) { dbHelper.getAllInventory(db) }
             val grouped = if (useDetailedClassification.value) {
-                // 详细模式：使用materialDetailedType进行分类
-                items.groupBy { 
-                    val detailedType = it.materialDetailedType
-                    if (detailedType.isNotEmpty()) detailedType else "未知"
-                }
+                items.groupBy { item -> item.materialDetailedType.ifBlank { "未知" } }
             } else {
-                // 简洁模式：严格使用materialType进行分类
-                items.groupBy { 
-                    val type = it.materialType
-                    if (type.isNotEmpty()) type else "未知"
-                }
+                items.groupBy { item -> item.materialType.ifBlank { "未知" } }
             }
-            val sortedKeys = grouped.keys.sortedWith(Comparator {
-                a, b ->
+            val sortedKeys = grouped.keys.sortedWith { a, b ->
                 val countA = grouped[a]?.size ?: 0
                 val countB = grouped[b]?.size ?: 0
-                if (countA != countB) {
-                    // 按数量排序，数量多的排前面
-                    countB.compareTo(countA)
-                } else {
-                    // 数量相同时，按名称排序
-                    a.compareTo(b)
-                }
-            })
-            val sortedGrouped = sortedKeys.associateWith { grouped[it]!! }
-            groupedItems.value = sortedGrouped
+                if (countA != countB) countB.compareTo(countA) else a.compareTo(b)
+            }
+            groupedItems.value = sortedKeys.associateWith { grouped[it].orEmpty() }
+        } else {
+            groupedItems.value = emptyMap()
         }
         isLoading.value = false
     }
 
     Column(
-        modifier = modifier.fillMaxSize().padding(8.dp)
+        modifier = modifier
+            .fillMaxSize()
+            .neuBackground()
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
-        Text(
-            text = "数据",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -221,30 +220,20 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
                 Text(text = if (mergeSameColorItems.value) "开" else "关")
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.padding(top = 3.dp))
 
         if (isLoading.value) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(text = "加载中...")
             }
         } else if (groupedItems.value.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(text = "暂无数据")
             }
         } else {
-            val swatchBlockSize = 60.dp
-            val swatchSpacing = 4.dp
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 groupedItems.value.forEach { (materialType, items) ->
                     item {
@@ -252,175 +241,66 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
                         val stackedGroups = if (mergeSameColorItems.value) {
                             sortedItems.groupBy { buildColorStackKey(it) }
                                 .map { (stackKey, grouped) ->
-                                    StackedColorGroup(
-                                        stackKey = stackKey,
-                                        displayItem = grouped.first(),
-                                        items = grouped
-                                    )
+                                    StackedColorGroup(stackKey, grouped.first(), grouped)
                                 }
                                 .sortedByDescending { colorSortValue(it.displayItem) }
                         } else {
                             emptyList()
                         }
 
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        NeuPanel(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(10.dp)
                         ) {
-                            Text(
-                                text = "$materialType (${items.size})",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            // 使用FlowRow实现自适应宽度的色块布局
-                            if (!mergeSameColorItems.value) {
-                                FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(swatchSpacing),
-                                    verticalArrangement = Arrangement.spacedBy(swatchSpacing)
-                                ) {
-                                    sortedItems.forEach { item ->
-                                        Column(
-                                            modifier = Modifier.width(swatchBlockSize),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Box(
-                                                modifier = Modifier.size(swatchBlockSize)
-                                            ) {
-                                                if (needsCheckerboardBackground(item.colorValues, item.colorCode)) {
-                                                    TransparencyCheckerboard(
-                                                        modifier = Modifier
-                                                            .fillMaxSize()
-                                                            .clip(swatchShape)
-                                                    )
-                                                }
-                                                ColorSwatch(
-                                                    colorValues = item.colorValues,
-                                                    colorType = item.colorType,
-                                                    modifier = Modifier.fillMaxSize()
-                                                )
-                                                val textColor = getTextColorForBackground(
-                                                    item.colorValues,
-                                                    item.colorCode
-                                                )
-                                                Column(
-                                                    modifier = Modifier
-                                                        .align(Alignment.Center)
-                                                        .padding(4.dp),
-                                                    horizontalAlignment = Alignment.CenterHorizontally
-                                                ) {
-                                                    Text(
-                                                        text = item.colorName.take(4),
-                                                        fontSize = 10.sp,
-                                                        color = textColor,
-                                                        textAlign = TextAlign.Center,
-                                                        modifier = Modifier.padding(bottom = 2.dp)
-                                                    )
-                                                    Text(
-                                                        text = String.format("%.1f%%", item.remainingPercent),
-                                                        fontSize = 10.sp,
-                                                        color = textColor,
-                                                        textAlign = TextAlign.Center
-                                                    )
-                                                }
-                                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    text = "$materialType (${items.size})",
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                                    val cellWidth = 58.dp
+                                    val minGap = 6.dp
+                                    val columns = ((maxWidth + minGap) / (cellWidth + minGap))
+                                        .toInt()
+                                        .coerceAtLeast(1)
+                                    if (!mergeSameColorItems.value) {
+                                        SwatchGrid(
+                                            cellWidth = cellWidth,
+                                            columns = columns,
+                                            itemCount = sortedItems.size
+                                        ) { index ->
+                                            val item = sortedItems[index]
+                                            SwatchCell(
+                                                size = cellWidth,
+                                                colorValues = item.colorValues,
+                                                colorCode = item.colorCode,
+                                                colorType = item.colorType,
+                                                title = item.colorName.take(4),
+                                                subtitle = String.format("%.1f%%", item.remainingPercent)
+                                            )
                                         }
-                                    }
-                                }
-                            } else {
-                                FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(swatchSpacing),
-                                    verticalArrangement = Arrangement.spacedBy(swatchSpacing)
-                                ) {
-                                    stackedGroups.forEach { stack ->
-                                        Column(
-                                            modifier = Modifier.width(swatchBlockSize),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(swatchBlockSize)
-                                                    .clickable {
-                                                        if (stack.count > 1) {
-                                                            activeStackDialog.value = stack
-                                                        }
-                                                    }
-                                            ) {
-                                                if (needsCheckerboardBackground(stack.displayItem.colorValues, stack.displayItem.colorCode)) {
-                                                    TransparencyCheckerboard(
-                                                        modifier = Modifier
-                                                            .fillMaxSize()
-                                                            .clip(swatchShape)
-                                                    )
-                                                }
-                                                ColorSwatch(
-                                                    colorValues = stack.displayItem.colorValues,
-                                                    colorType = stack.displayItem.colorType,
-                                                    modifier = Modifier.fillMaxSize()
-                                                )
-                                                val textColor = getTextColorForBackground(
-                                                    stack.displayItem.colorValues,
-                                                    stack.displayItem.colorCode
-                                                )
-                                                if (stack.count > 1) {
-                                                    Text(
-                                                        text = stack.displayItem.colorName.take(4),
-                                                        fontSize = 10.sp,
-                                                        color = textColor,
-                                                        textAlign = TextAlign.Center,
-                                                        modifier = Modifier
-                                                            .align(Alignment.Center)
-                                                            .padding(horizontal = 3.dp)
-                                                    )
-                                                } else {
-                                                    Column(
-                                                        modifier = Modifier
-                                                            .align(Alignment.Center)
-                                                            .padding(4.dp),
-                                                        horizontalAlignment = Alignment.CenterHorizontally
-                                                    ) {
-                                                        Text(
-                                                            text = stack.displayItem.colorName.take(4),
-                                                            fontSize = 10.sp,
-                                                            color = textColor,
-                                                            textAlign = TextAlign.Center,
-                                                            modifier = Modifier.padding(bottom = 2.dp)
-                                                        )
-                                                        Text(
-                                                            text = String.format("%.1f%%", stack.displayItem.remainingPercent),
-                                                            fontSize = 10.sp,
-                                                            color = textColor,
-                                                            textAlign = TextAlign.Center
-                                                        )
+                                    } else {
+                                        SwatchGrid(
+                                            cellWidth = cellWidth,
+                                            columns = columns,
+                                            itemCount = stackedGroups.size
+                                        ) { index ->
+                                            val stack = stackedGroups[index]
+                                            SwatchCell(
+                                                size = cellWidth,
+                                                colorValues = stack.displayItem.colorValues,
+                                                colorCode = stack.displayItem.colorCode,
+                                                colorType = stack.displayItem.colorType,
+                                                title = stack.displayItem.colorName.take(4),
+                                                subtitle = if (stack.count > 1) null else String.format("%.1f%%", stack.displayItem.remainingPercent),
+                                                badgeText = if (stack.count > 1) "${stack.count}" else null,
+                                                modifier = Modifier.clickable {
+                                                    if (stack.count > 1) {
+                                                        activeStackDialog.value = stack
                                                     }
                                                 }
-                                                if (stack.count > 1) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .align(Alignment.TopEnd)
-                                                            .padding(2.dp)
-                                                            .size(18.dp)
-                                                            .background(
-                                                                Color(0xCC000000),
-                                                                shape = androidx.compose.foundation.shape.CircleShape
-                                                            ),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        Text(
-                                                            text = "${stack.count}",
-                                                            style = TextStyle(
-                                                                fontSize = 9.sp,
-                                                                color = Color.White,
-                                                                textAlign = TextAlign.Center,
-                                                                platformStyle = PlatformTextStyle(
-                                                                    includeFontPadding = false
-                                                                )
-                                                            ),
-                                                            modifier = Modifier.fillMaxSize()
-                                                        )
-                                                    }
-                                                }
-                                            }
+                                            )
                                         }
                                     }
                                 }
@@ -448,11 +328,9 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(dialogStack.items) { item ->
-                        Card(
+                        NeuPanel(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                            )
+                            contentPadding = PaddingValues(0.dp)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -497,3 +375,101 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
+private fun SwatchGrid(
+    cellWidth: Dp,
+    columns: Int,
+    itemCount: Int,
+    itemContent: @Composable (Int) -> Unit
+) {
+    val rowSpacing = 6.dp
+    Column(verticalArrangement = Arrangement.spacedBy(rowSpacing)) {
+        val rows = (0 until itemCount).chunked(columns)
+        rows.forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                row.forEach { index ->
+                    Box(modifier = Modifier.width(cellWidth), contentAlignment = Alignment.Center) {
+                        itemContent(index)
+                    }
+                }
+                repeat(columns - row.size) {
+                    Spacer(modifier = Modifier.width(cellWidth))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwatchCell(
+    size: Dp,
+    colorValues: List<String>,
+    colorCode: String,
+    colorType: String,
+    title: String,
+    subtitle: String?,
+    badgeText: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier.size(size)) {
+        if (needsCheckerboardBackground(colorValues, colorCode)) {
+            TransparencyCheckerboard(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(swatchShape)
+            )
+        }
+        ColorSwatch(
+            colorValues = colorValues,
+            colorType = colorType,
+            modifier = Modifier.fillMaxSize()
+        )
+        val textColor = getTextColorForBackground(colorValues, colorCode)
+        Column(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = title,
+                fontSize = 10.sp,
+                color = textColor,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = if (subtitle != null) 2.dp else 0.dp)
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    fontSize = 10.sp,
+                    color = textColor,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        if (badgeText != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(2.dp)
+                    .size(18.dp)
+                    .background(Color(0x99000000), shape = RoundedCornerShape(999.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = badgeText,
+                    style = TextStyle(
+                        fontSize = 9.sp,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    ),
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    }
+}

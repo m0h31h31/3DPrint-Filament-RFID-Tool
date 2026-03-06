@@ -1,6 +1,5 @@
 package com.m0h31h31.bamburfidreader.ui.screens
 
-import android.graphics.drawable.Icon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,13 +15,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SearchBar
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextField
 import androidx.compose.material3.SwipeToDismissBox
@@ -37,7 +31,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,11 +50,16 @@ import com.m0h31h31.bamburfidreader.FilamentDbHelper
 import com.m0h31h31.bamburfidreader.InventoryItem
 import com.m0h31h31.bamburfidreader.R
 import com.m0h31h31.bamburfidreader.ui.components.ColorSwatch
+import com.m0h31h31.bamburfidreader.ui.components.NeuButton
+import com.m0h31h31.bamburfidreader.ui.components.NeuPanel
+import com.m0h31h31.bamburfidreader.ui.components.NeuTextField
+import com.m0h31h31.bamburfidreader.ui.components.neuBackground
 import com.m0h31h31.bamburfidreader.ui.theme.BambuRfidReaderTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val inventoryItemShape = RoundedCornerShape(24.dp)
+
 @Composable
 fun InventoryScreen(
     dbHelper: FilamentDbHelper?,
@@ -267,27 +265,23 @@ fun InventoryScreen(
     }
 
     Surface(
-        modifier = modifier.fillMaxSize()
+        modifier = modifier.fillMaxSize().neuBackground(),
+        color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = stringResource(R.string.inventory_title),
-                style = MaterialTheme.typography.titleLarge
-            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextField(
+                NeuTextField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text(text = stringResource(R.string.inventory_search_placeholder)) },
-                    singleLine = true,
+                    label = stringResource(R.string.inventory_search_placeholder),
                     modifier = Modifier
                         .weight(1f)
                         .padding(vertical = 0.dp),
@@ -372,8 +366,8 @@ fun InventoryScreen(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .padding(vertical = 6.dp)
-                                        .clip(RoundedCornerShape(12.dp))
+                                        .padding(vertical = 3.dp)
+                                        .clip(inventoryItemShape)
                                         .background(color)
                                         .padding(horizontal = 16.dp),
                                     contentAlignment = alignment
@@ -387,9 +381,13 @@ fun InventoryScreen(
                                 }
                             },
                             content = {
-                                Card(modifier = Modifier.fillMaxWidth()) {
+                                NeuPanel(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = inventoryItemShape,
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(10.dp)
+                                ) {
                                     Column(
-                                        modifier = Modifier.padding(8.dp),
+                                        modifier = Modifier,
                                         verticalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
                                         Row(
