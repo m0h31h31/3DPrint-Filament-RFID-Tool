@@ -16,6 +16,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,11 +25,40 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.m0h31h31.bamburfidreader.R
 import com.m0h31h31.bamburfidreader.ui.components.NeuButton
 import com.m0h31h31.bamburfidreader.ui.components.NeuPanel
 import com.m0h31h31.bamburfidreader.ui.components.neuBackground
+import kotlinx.coroutines.delay
+
+private enum class StatusTone {
+    SUCCESS,
+    ERROR,
+    WARNING,
+    INFO
+}
+
+private fun resolveStatusTone(message: String): StatusTone {
+    val text = message.lowercase()
+    return when {
+        listOf("失败", "错误", "异常", "取消", "不可用").any { it in text } -> StatusTone.ERROR
+        listOf("成功", "完成", "已保存", "已打包", "已停止", "已导入").any { it in text } -> StatusTone.SUCCESS
+        listOf("提醒", "警告", "请", "等待", "准备", "覆盖").any { it in text } -> StatusTone.WARNING
+        else -> StatusTone.INFO
+    }
+}
+
+@Composable
+private fun statusToneColor(tone: StatusTone): Color {
+    return when (tone) {
+        StatusTone.SUCCESS -> Color(0xFF2E8B57)
+        StatusTone.ERROR -> MaterialTheme.colorScheme.error
+        StatusTone.WARNING -> Color(0xFFB7791F)
+        StatusTone.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+}
 
 @Preview
 @Composable
@@ -36,6 +66,7 @@ fun MiscScreen(
     onBackupDatabase: () -> String = { "" },
     onImportDatabase: () -> String = { "" },
     onClearFuid: () -> String = { "" },
+    onCancelClearFuid: () -> String = { "" },
     onResetDatabase: () -> String = { "" },
     miscStatusMessage: String = "",
     onExportTagPackage: () -> String = { "" },
@@ -49,14 +80,40 @@ fun MiscScreen(
     onFormatTagDebugEnabledChange: (Boolean) -> Unit = {},
     forceOverwriteImport: Boolean = false,
     onForceOverwriteImportChange: (Boolean) -> Unit = {},
+    formatInProgress: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val uriHandler = LocalUriHandler.current
     val boostLink =
         "bambulab://bbl/design/model/detail?design_id=2020787&instance_id=2253290&appSharePlatform=copy"
     var message by remember { mutableStateOf("") }
+    var visibleStatusMessage by remember { mutableStateOf("") }
+    var lastMiscStatusMessage by remember { mutableStateOf(miscStatusMessage) }
+    var lastPageMessage by remember { mutableStateOf(message) }
     var showReadAllSectorsDialog by remember { mutableStateOf(false) }
     var showImportDatabaseConfirmDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(miscStatusMessage, message) {
+        val trimmedMiscStatus = miscStatusMessage.trim()
+        val trimmedPageMessage = message.trim()
+        val nextMessage = when {
+            trimmedPageMessage != lastPageMessage && trimmedPageMessage.isNotBlank() -> trimmedPageMessage
+            trimmedMiscStatus != lastMiscStatusMessage && trimmedMiscStatus.isNotBlank() -> trimmedMiscStatus
+            trimmedPageMessage.isNotBlank() -> trimmedPageMessage
+            else -> trimmedMiscStatus
+        }
+        lastMiscStatusMessage = trimmedMiscStatus
+        lastPageMessage = trimmedPageMessage
+        if (nextMessage.isBlank()) {
+            visibleStatusMessage = ""
+            return@LaunchedEffect
+        }
+        visibleStatusMessage = nextMessage
+        delay(10000)
+        if (visibleStatusMessage == nextMessage) {
+            visibleStatusMessage = ""
+        }
+    }
 
     fun handleReadAllSectorsChange(checked: Boolean) {
         if (checked) {
@@ -87,7 +144,8 @@ fun MiscScreen(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (appConfigMessage.isNotBlank() || miscStatusMessage.isNotBlank() || message.isNotBlank()) {
+            val visibleStatusColor = statusToneColor(resolveStatusTone(visibleStatusMessage))
+            if (appConfigMessage.isNotBlank() || visibleStatusMessage.isNotBlank()) {
                 SelectionContainer {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (appConfigMessage.isNotBlank()) {
@@ -97,18 +155,11 @@ fun MiscScreen(
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
-                        if (miscStatusMessage.isNotBlank()) {
+                        if (visibleStatusMessage.isNotBlank()) {
                             Text(
-                                text = miscStatusMessage,
+                                text = visibleStatusMessage,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (message.isNotBlank()) {
-                            Text(
-                                text = message,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = visibleStatusColor
                             )
                         }
                     }
@@ -202,8 +253,14 @@ fun MiscScreen(
             }
 
             NeuButton(
-                text = "格式化标签",
-                onClick = { message = onClearFuid() },
+                text = if (formatInProgress) "取消格式化" else "格式化标签",
+                onClick = {
+                    message = if (formatInProgress) {
+                        onCancelClearFuid()
+                    } else {
+                        onClearFuid()
+                    }
+                },
                 modifier = Modifier.fillMaxWidth()
             )
 

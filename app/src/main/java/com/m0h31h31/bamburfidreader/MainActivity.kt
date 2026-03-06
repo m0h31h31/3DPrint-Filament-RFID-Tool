@@ -563,6 +563,11 @@ class MainActivity : ComponentActivity() {
                     onBackupDatabase = { backupDatabase() },
                     onImportDatabase = { importDatabase() },
                     onClearFuid = { enqueueClearFuidTask() },
+                    onCancelClearFuid = {
+                        pendingClearFuid = false
+                        miscStatusMessage = "已取消格式化任务"
+                        miscStatusMessage
+                    },
                     onResetDatabase = { resetDatabase() },
                     miscStatusMessage = miscStatusMessage,
                     onExportTagPackage = {
@@ -590,6 +595,7 @@ class MainActivity : ComponentActivity() {
                     writeStatusMessage = writeStatusMessage,
                     writeToolStatusMessage = writeToolStatusMessage,
                     writeInProgress = pendingWriteItem != null || pendingVerifyItem != null,
+                    formatInProgress = pendingClearFuid,
                     onTagScreenEnter = {
                         refreshShareTagItemsAsync()
                     },

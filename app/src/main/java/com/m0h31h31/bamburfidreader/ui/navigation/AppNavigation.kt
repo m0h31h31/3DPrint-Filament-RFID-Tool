@@ -73,6 +73,7 @@ fun AppNavigation(
     onBackupDatabase: () -> String,
     onImportDatabase: () -> String,
     onClearFuid: () -> String,
+    onCancelClearFuid: () -> String,
     onResetDatabase: () -> String,
     miscStatusMessage: String,
     onExportTagPackage: () -> String,
@@ -88,6 +89,7 @@ fun AppNavigation(
     writeStatusMessage: String,
     writeToolStatusMessage: String,
     writeInProgress: Boolean,
+    formatInProgress: Boolean,
     onTagScreenEnter: () -> Unit,
     onRefreshShareFiles: () -> String,
     onStartWriteTag: (ShareTagItem) -> Unit,
@@ -102,6 +104,11 @@ fun AppNavigation(
     LaunchedEffect(currentRoute, writeInProgress) {
         if (currentRoute != "tag" && writeInProgress) {
             onCancelWriteTag()
+        }
+    }
+    LaunchedEffect(currentRoute, formatInProgress) {
+        if (currentRoute != "misc" && formatInProgress) {
+            onCancelClearFuid()
         }
     }
     
@@ -215,6 +222,7 @@ fun AppNavigation(
                                 onBackupDatabase = onBackupDatabase,
                                 onImportDatabase = onImportDatabase,
                                 onClearFuid = onClearFuid,
+                                onCancelClearFuid = onCancelClearFuid,
                                 onResetDatabase = onResetDatabase,
                                 miscStatusMessage = miscStatusMessage,
                                 onExportTagPackage = onExportTagPackage,
@@ -227,7 +235,8 @@ fun AppNavigation(
                                 formatTagDebugEnabled = formatTagDebugEnabled,
                                 onFormatTagDebugEnabledChange = onFormatTagDebugEnabledChange,
                                 forceOverwriteImport = forceOverwriteImport,
-                                onForceOverwriteImportChange = onForceOverwriteImportChange
+                                onForceOverwriteImportChange = onForceOverwriteImportChange,
+                                formatInProgress = formatInProgress
                             )
                         }
         }
