@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Canvas
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.AlertDialog
@@ -17,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -24,14 +26,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.m0h31h31.bamburfidreader.FilamentDbHelper
 import com.m0h31h31.bamburfidreader.InventoryItem
 import com.m0h31h31.bamburfidreader.ui.components.ColorSwatch
+import com.m0h31h31.bamburfidreader.util.parseColorValue
 import androidx.compose.foundation.layout.FlowRow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.ui.geometry.Offset
+import kotlin.math.roundToInt
 
 private data class StackedColorGroup(
     val stackKey: String,
@@ -73,38 +79,59 @@ private fun calculateBrightness(color: androidx.compose.ui.graphics.Color): Floa
 
 // 根据背景颜色获取合适的文字颜色
 private fun getTextColorForBackground(colorValues: List<String>, colorCode: String): androidx.compose.ui.graphics.Color {
-    // 尝试获取第一种颜色
+    // 优先取第一个颜色，用 RGB 亮度决定文本颜色
     val firstColor = if (colorValues.isNotEmpty()) {
-        try {
-            androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(colorValues[0].trim()))
-        } catch (e: Exception) {
-            null
-        }
-    } else if (colorCode.isNotEmpty()) {
-        try {
-            androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(colorCode))
-        } catch (e: Exception) {
-            null
-        }
+        parseColorValue(colorValues[0].trim())
     } else {
-        null
+        parseColorValue(colorCode.trim())
     }
-    
-    // 如果获取到颜色，根据亮度决定文字颜色
+
     if (firstColor != null) {
+        // 透明度超过 50%（alpha <= 0.5）时，强制使用黑色文字。
+        if (firstColor.alpha <= 0.5f) {
+            return Color.Black
+        }
         val brightness = calculateBrightness(firstColor)
-        return if (brightness < 0.5) {
-            // 深色背景，使用白色文字
-            androidx.compose.ui.graphics.Color.White
-        } else {
-            // 浅色背景，使用黑色文字
-            androidx.compose.ui.graphics.Color.Black
+        return if (brightness < 0.5f) Color.White else Color.Black
+    }
+    return Color.Black
+}
+
+private fun needsCheckerboardBackground(colorValues: List<String>, colorCode: String): Boolean {
+    val candidates = if (colorValues.isNotEmpty()) colorValues else listOf(colorCode)
+    if (candidates.isEmpty()) return false
+    return candidates.any { raw ->
+        val value = raw.trim()
+        if (value.isEmpty()) return@any false
+        val alpha = parseColorValue(value)?.alpha ?: 1f
+        // 只给半透明显示棋盘格；完全透明/完全不透明都不显示。
+        alpha < 1f
+    }
+}
+
+@Composable
+private fun TransparencyCheckerboard(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val tileSize = 6.dp.toPx()
+        if (tileSize <= 0f) return@Canvas
+        val columns = (size.width / tileSize).roundToInt() + 1
+        val rows = (size.height / tileSize).roundToInt() + 1
+        val light = Color(0xFFF2F2F2)
+        val dark = Color(0xFFD5D5D5)
+        for (y in 0 until rows) {
+            for (x in 0 until columns) {
+                val color = if ((x + y) % 2 == 0) light else dark
+                drawRect(
+                    color = color,
+                    topLeft = Offset(x * tileSize, y * tileSize),
+                    size = androidx.compose.ui.geometry.Size(tileSize, tileSize)
+                )
+            }
         }
     }
-    
-    // 默认使用黑色文字
-    return androidx.compose.ui.graphics.Color.Black
 }
+
+private val swatchShape = RoundedCornerShape(14.dp)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -259,6 +286,13 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
                                             Box(
                                                 modifier = Modifier.size(swatchBlockSize)
                                             ) {
+                                                if (needsCheckerboardBackground(item.colorValues, item.colorCode)) {
+                                                    TransparencyCheckerboard(
+                                                        modifier = Modifier
+                                                            .fillMaxSize()
+                                                            .clip(swatchShape)
+                                                    )
+                                                }
                                                 ColorSwatch(
                                                     colorValues = item.colorValues,
                                                     colorType = item.colorType,
@@ -312,6 +346,13 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
                                                         }
                                                     }
                                             ) {
+                                                if (needsCheckerboardBackground(stack.displayItem.colorValues, stack.displayItem.colorCode)) {
+                                                    TransparencyCheckerboard(
+                                                        modifier = Modifier
+                                                            .fillMaxSize()
+                                                            .clip(swatchShape)
+                                                    )
+                                                }
                                                 ColorSwatch(
                                                     colorValues = stack.displayItem.colorValues,
                                                     colorType = stack.displayItem.colorType,
@@ -455,3 +496,4 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
         )
     }
 }
+
