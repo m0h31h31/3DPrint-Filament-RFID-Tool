@@ -40,7 +40,8 @@
 ## 🖼️ 应用截图
 
 ![应用截图](https://github.com/m0h31h31/BambuRfidReader/blob/master/img/brr.png)
-![应用截图](https://gitee.com/JackMoHeiHei/BambuRfidReader/blob/master/img/brr.png)
+
+![应用截图](https://gitee.com/JackMoHeiHei/BambuRfidReader/raw/master/img/brr.png)
 
 ------
 
