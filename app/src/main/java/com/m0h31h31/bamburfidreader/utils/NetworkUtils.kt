@@ -92,7 +92,11 @@ object NetworkUtils {
         }
     }
 
-    suspend fun postJson(urlString: String, payload: JSONObject): Boolean {
+    suspend fun postJson(
+        urlString: String,
+        payload: JSONObject,
+        headers: Map<String, String> = emptyMap()
+    ): Boolean {
         return withContext(Dispatchers.IO) {
             val url = URL(urlString)
             val connection = url.openConnection() as HttpURLConnection
@@ -103,6 +107,11 @@ object NetworkUtils {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 setRequestProperty("Accept", "application/json")
+                headers.forEach { (key, value) ->
+                    if (value.isNotBlank()) {
+                        setRequestProperty(key, value)
+                    }
+                }
             }
 
             return@withContext try {
