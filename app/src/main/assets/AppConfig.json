@@ -15,7 +15,7 @@
         },
         "qq": {
             "type": "scheme",
-            "value": "mqq://im/chat?chat_type=group&uin=1074926713"
+            "value": "mqqapi://card/show_pslcard?src_type=internal&version=1&card_type=group&uin=1074926713"
         },
         "gitee": {
             "type": "url",
