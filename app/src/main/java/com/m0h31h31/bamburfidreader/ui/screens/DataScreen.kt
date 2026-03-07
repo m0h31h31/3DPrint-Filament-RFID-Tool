@@ -22,7 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,6 +46,7 @@ import com.m0h31h31.bamburfidreader.R
 import com.m0h31h31.bamburfidreader.FilamentDbHelper
 import com.m0h31h31.bamburfidreader.InventoryItem
 import com.m0h31h31.bamburfidreader.ui.components.ColorSwatch
+import com.m0h31h31.bamburfidreader.ui.components.AppSwitch
 import com.m0h31h31.bamburfidreader.ui.components.NeuPanel
 import com.m0h31h31.bamburfidreader.ui.components.neuBackground
 import com.m0h31h31.bamburfidreader.util.parseColorValue
@@ -204,7 +204,7 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(text = stringResource(R.string.data_grouping))
-                Switch(
+                AppSwitch(
                     checked = useDetailedClassification.value,
                     onCheckedChange = { useDetailedClassification.value = it }
                 )
@@ -222,7 +222,7 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(text = stringResource(R.string.data_merge))
-                Switch(
+                AppSwitch(
                     checked = mergeSameColorItems.value,
                     onCheckedChange = { mergeSameColorItems.value = it }
                 )

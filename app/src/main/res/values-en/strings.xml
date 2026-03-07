@@ -6,6 +6,7 @@
     <string name="action_back">Back</string>
     <string name="action_delete">Delete</string>
     <string name="action_cancel">Cancel</string>
+    <string name="action_hide">Hide</string>
     <string name="action_backup_db">Backup Database</string>
     <string name="action_import_db">Import Database</string>
     <string name="action_boost_open_bambu">Boost: Open Bambu App</string>
@@ -81,7 +82,7 @@
     <string name="data_group_title_format">%1$s (%2$d)</string>
     <string name="data_stack_title_format">%1$s · %2$d</string>
 
-    <string name="tag_search_placeholder">Filter by material/color (supports pla red)</string>
+    <string name="tag_search_placeholder">Search any field</string>
     <string name="tag_refresh">Refresh</string>
     <string name="tag_summary_format">Total: %1$d    Filtered: %2$d</string>
     <string name="tag_uid_color_id_format">UID: %1$s    Color ID: %2$s</string>
@@ -119,6 +120,9 @@
     <string name="write_ndef_ready">NDEF write ready: keep the target tag steady on the NFC area until writing and verification finish.</string>
 
     <string name="misc_read_all_sectors">Read all sector data and save files</string>
+    <string name="misc_ui_style">UI style</string>
+    <string name="misc_ui_style_neumorphism">Neumorphism</string>
+    <string name="misc_ui_style_miuix">MIUIX</string>
     <string name="misc_save_keys">Save keys to file</string>
     <string name="misc_read_all_title">Read All Data Notice</string>
     <string name="misc_read_all_message">Reading all data will slow scanning down. Files will be saved under Android/data/com.m0h31h31.bamburfidreader/rfid_file/self_xxxxx. Enable it?</string>

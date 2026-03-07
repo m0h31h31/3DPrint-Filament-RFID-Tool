@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import com.m0h31h31.bamburfidreader.ui.navigation.AppNavigation
 import com.m0h31h31.bamburfidreader.ui.screens.NdefWriteRequest
 import com.m0h31h31.bamburfidreader.ui.screens.NdefWriteType
+import com.m0h31h31.bamburfidreader.ui.theme.AppUiStyle
 import com.m0h31h31.bamburfidreader.ui.theme.BambuRfidReaderTheme
 import com.m0h31h31.bamburfidreader.util.normalizeColorValue
 import com.m0h31h31.bamburfidreader.utils.AnalyticsReporter
@@ -82,6 +83,7 @@ private const val WRITE_RESUME_MAX_ATTEMPTS = 3
 private const val RW_RECONNECT_DELAY_MS = 35L
 private const val UI_PREFS_NAME = "ui_prefs"
 private const val KEY_VOICE_ENABLED = "voice_enabled"
+private const val KEY_UI_STYLE = "ui_style"
 private val WRITE_HKDF_SALT = byteArrayOf(
     0x9a.toByte(), 0x75.toByte(), 0x9c.toByte(), 0xf2.toByte(),
     0xc4.toByte(), 0xf7.toByte(), 0xca.toByte(), 0xff.toByte(),
@@ -265,6 +267,7 @@ class MainActivity : ComponentActivity() {
     private var uiState by mutableStateOf(NfcUiState(status = "Waiting for RFID tag"))
     private var filamentDbHelper: FilamentDbHelper? = null
     private var voiceEnabled by mutableStateOf(false)
+    private var uiStyle by mutableStateOf(AppUiStyle.NEUMORPHIC)
     private var readAllSectors by mutableStateOf(false) // 控制是否读取全部扇区，默认关闭
     private var saveKeysToFile by mutableStateOf(false) // 控制是否额外导出秘钥文件
     private var forceOverwriteImport by mutableStateOf(false) // 控制导入标签包时是否覆盖同UID文件
@@ -518,6 +521,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val uiPrefs = getSharedPreferences(UI_PREFS_NAME, Context.MODE_PRIVATE)
         voiceEnabled = uiPrefs.getBoolean(KEY_VOICE_ENABLED, false)
+        uiStyle = runCatching {
+            AppUiStyle.valueOf(uiPrefs.getString(KEY_UI_STYLE, AppUiStyle.NEUMORPHIC.name).orEmpty())
+        }.getOrDefault(AppUiStyle.NEUMORPHIC)
         LogCollector.init(this)
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
         filamentDbHelper = FilamentDbHelper(this)
@@ -541,10 +547,11 @@ class MainActivity : ComponentActivity() {
         checkAndUpdateConfig()
         
         setContent {
-            BambuRfidReaderTheme {
+            BambuRfidReaderTheme(uiStyle = uiStyle) {
                 AppNavigation(
                     state = uiState,
                     voiceEnabled = voiceEnabled,
+                    uiStyle = uiStyle,
                     readAllSectors = readAllSectors,
                     saveKeysToFile = saveKeysToFile,
                     formatTagDebugEnabled = formatTagDebugEnabled,
@@ -559,6 +566,10 @@ class MainActivity : ComponentActivity() {
                         } else if (!ttsReady) {
                             initTts()
                         }
+                    },
+                    onUiStyleChange = {
+                        uiStyle = it
+                        uiPrefs.edit().putString(KEY_UI_STYLE, it.name).apply()
                     },
                     onReadAllSectorsChange = {
                         readAllSectors = it

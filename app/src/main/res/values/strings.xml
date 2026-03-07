@@ -6,6 +6,7 @@
     <string name="action_back">返回</string>
     <string name="action_delete">删除</string>
     <string name="action_cancel">取消</string>
+    <string name="action_hide">隐藏</string>
     <string name="action_backup_db">备份数据库</string>
     <string name="action_import_db">导入数据库</string>
     <string name="action_boost_open_bambu">Boost：打开 Bambu App</string>
@@ -81,7 +82,7 @@
     <string name="data_group_title_format">%1$s (%2$d)</string>
     <string name="data_stack_title_format">%1$s · %2$d</string>
 
-    <string name="tag_search_placeholder">按耗材/颜色筛选（支持 pla红）</string>
+    <string name="tag_search_placeholder">搜索任意字段</string>
     <string name="tag_refresh">刷新</string>
     <string name="tag_summary_format">总数：%1$d    当前筛选：%2$d</string>
     <string name="tag_uid_color_id_format">UID：%1$s    颜色ID：%2$s</string>
@@ -119,6 +120,9 @@
     <string name="write_ndef_ready">NDEF 写入准备就绪：请将目标标签紧贴 NFC 区域，保持静止直到写入与校验完成。</string>
 
     <string name="misc_read_all_sectors">读取全部扇区数据并保存文件</string>
+    <string name="misc_ui_style">界面风格</string>
+    <string name="misc_ui_style_neumorphism">新拟态</string>
+    <string name="misc_ui_style_miuix">MIUIX</string>
     <string name="misc_save_keys">保存秘钥到文件</string>
     <string name="misc_read_all_title">读取全部数据提醒</string>
     <string name="misc_read_all_message">读取全部数据会影响读取速度，数据会保存在 Android/data/com.m0h31h31.bamburfidreader/rfid_file/self_xxxxx 下。确定要开启吗？</string>

@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextField
@@ -25,7 +24,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Button
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
@@ -49,12 +47,16 @@ import androidx.compose.ui.unit.dp
 import com.m0h31h31.bamburfidreader.FilamentDbHelper
 import com.m0h31h31.bamburfidreader.InventoryItem
 import com.m0h31h31.bamburfidreader.R
+import com.m0h31h31.bamburfidreader.ui.components.AppLinearProgressIndicator
 import com.m0h31h31.bamburfidreader.ui.components.ColorSwatch
+import com.m0h31h31.bamburfidreader.ui.components.AppSlider
+import com.m0h31h31.bamburfidreader.ui.components.AppSearchBar
 import com.m0h31h31.bamburfidreader.ui.components.NeuButton
 import com.m0h31h31.bamburfidreader.ui.components.NeuPanel
-import com.m0h31h31.bamburfidreader.ui.components.NeuTextField
 import com.m0h31h31.bamburfidreader.ui.components.neuBackground
+import com.m0h31h31.bamburfidreader.ui.theme.AppUiStyle
 import com.m0h31h31.bamburfidreader.ui.theme.BambuRfidReaderTheme
+import com.m0h31h31.bamburfidreader.ui.theme.LocalAppUiStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -124,6 +126,7 @@ fun InventoryScreen(
     dbHelper: FilamentDbHelper?,
     modifier: Modifier = Modifier
 ) {
+    val uiStyle = LocalAppUiStyle.current
     var query by remember { mutableStateOf("") }
     var items by remember { mutableStateOf<List<InventoryItem>>(emptyList()) }
     var refreshKey by remember { mutableStateOf(0) }
@@ -265,7 +268,7 @@ fun InventoryScreen(
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Slider(
+                        AppSlider(
                             value = editGrams?.toFloat() ?: 0f,
                             onValueChange = { value ->
                                 val target = pendingEdit
@@ -334,10 +337,10 @@ fun InventoryScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                NeuTextField(
+                AppSearchBar(
                     value = query,
                     onValueChange = { query = it },
-                    label = stringResource(R.string.inventory_search_placeholder),
+                    placeholder = stringResource(R.string.inventory_search_placeholder),
                     modifier = Modifier
                         .weight(1f)
                         .padding(vertical = 0.dp),
@@ -405,9 +408,14 @@ fun InventoryScreen(
                             state = dismissState,
                             backgroundContent = {
                                 val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
-                                    Color(0xFFE54D4D) // 删除红色
+                                    if (uiStyle == AppUiStyle.MIUIX) MaterialTheme.colorScheme.errorContainer else Color(0xFFE54D4D)
                                 } else {
-                                    Color(0xFF4CAF50) // 编辑绿色
+                                    if (uiStyle == AppUiStyle.MIUIX) MaterialTheme.colorScheme.primaryContainer else Color(0xFF4CAF50)
+                                }
+                                val textColor = if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
+                                    if (uiStyle == AppUiStyle.MIUIX) MaterialTheme.colorScheme.onErrorContainer else Color.White
+                                } else {
+                                    if (uiStyle == AppUiStyle.MIUIX) MaterialTheme.colorScheme.onPrimaryContainer else Color.White
                                 }
                                 val alignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
                                     Alignment.CenterEnd
@@ -431,7 +439,7 @@ fun InventoryScreen(
                                     Text(
                                         text = text,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.White,
+                                        color = textColor,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
@@ -518,8 +526,8 @@ fun InventoryScreen(
                                                     )
                                                 }
                                             }
-                                            LinearProgressIndicator(
-                                                progress = { item.remainingPercent / 100f },
+                                            AppLinearProgressIndicator(
+                                                progress = item.remainingPercent / 100f,
                                                 modifier = Modifier
                                                     .weight(0.6f)
                                                     .height(6.dp)

@@ -15,6 +15,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
@@ -37,25 +39,31 @@ import com.m0h31h31.bamburfidreader.ui.screens.MiscScreen
 import com.m0h31h31.bamburfidreader.ui.screens.DataScreen
 import com.m0h31h31.bamburfidreader.ui.screens.NdefWriteRequest
 import com.m0h31h31.bamburfidreader.ui.screens.WriteScreen
+import com.m0h31h31.bamburfidreader.ui.theme.AppUiStyle
+import com.m0h31h31.bamburfidreader.ui.theme.LocalAppUiStyle
 import com.m0h31h31.bamburfidreader.utils.ConfigManager
+import top.yukonga.miuix.kmp.basic.NavigationBar as MiuixNavigationBar
+import top.yukonga.miuix.kmp.basic.NavigationBarItem as MiuixNavigationBarItem
 
 private data class TopDestination(
     val route: String,
-    @StringRes val labelRes: Int
+    @StringRes val labelRes: Int,
+    val iconRes: Int
 )
 
 private val topDestinations = listOf(
-    TopDestination("reader", R.string.tab_reader),
-    TopDestination("inventory", R.string.tab_inventory),
-    TopDestination("data", R.string.tab_data),
-    TopDestination("tag", R.string.tab_tag),
-    TopDestination("misc", R.string.tab_misc)
+    TopDestination("reader", R.string.tab_reader, R.drawable.shibie),
+    TopDestination("inventory", R.string.tab_inventory, R.drawable.kucun),
+    TopDestination("data", R.string.tab_data, R.drawable.shuju),
+    TopDestination("tag", R.string.tab_tag, R.drawable.fuzhi),
+    TopDestination("misc", R.string.tab_misc, R.drawable.zaxiang)
 )
 
 @Composable
 fun AppNavigation(
     state: NfcUiState,
     voiceEnabled: Boolean,
+    uiStyle: AppUiStyle,
     readAllSectors: Boolean,
     saveKeysToFile: Boolean,
     formatTagDebugEnabled: Boolean,
@@ -63,6 +71,7 @@ fun AppNavigation(
     ttsReady: Boolean,
     ttsLanguageReady: Boolean,
     onVoiceEnabledChange: (Boolean) -> Unit,
+    onUiStyleChange: (AppUiStyle) -> Unit,
     onReadAllSectorsChange: (Boolean) -> Unit,
     onSaveKeysToFileChange: (Boolean) -> Unit,
     onFormatTagDebugEnabledChange: (Boolean) -> Unit,
@@ -99,6 +108,7 @@ fun AppNavigation(
     onCancelWriteTag: () -> Unit,
     onStartNdefWrite: (NdefWriteRequest) -> String
 ) {
+    val resolvedUiStyle = LocalAppUiStyle.current
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -139,21 +149,16 @@ fun AppNavigation(
             .neuBackground(),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NeuPanel(
-                modifier = Modifier
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .navigationBarsPadding(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(4.dp)
-            ) {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 0.dp
+            if (resolvedUiStyle == AppUiStyle.MIUIX) {
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .navigationBarsPadding()
                 ) {
-                    topDestinations.forEach { destination ->
-                        val selected = currentRoute == destination.route
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
+                    MiuixNavigationBar {
+                        topDestinations.forEach { destination ->
+                            val selected = currentRoute == destination.route
+                            val onNavigate = {
                                 navController.navigate(destination.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
@@ -161,10 +166,62 @@ fun AppNavigation(
                                     launchSingleTop = true
                                     restoreState = true
                                 }
-                            },
-                            icon = { Box(modifier = Modifier.size(0.dp)) },
-                            label = { Text(text = stringResource(destination.labelRes)) }
-                        )
+                            }
+                            val label = stringResource(destination.labelRes)
+                            val icon = ImageVector.vectorResource(destination.iconRes)
+                            MiuixNavigationBarItem(
+                                selected = selected,
+                                onClick = onNavigate,
+                                icon = icon,
+                                label = label
+                            )
+                        }
+                    }
+                }
+            } else {
+                NeuPanel(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .navigationBarsPadding(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(4.dp)
+                ) {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 0.dp
+                    ) {
+                        topDestinations.forEach { destination ->
+                            val selected = currentRoute == destination.route
+                            val onNavigate = {
+                                navController.navigate(destination.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                            val label = stringResource(destination.labelRes)
+                            val icon = ImageVector.vectorResource(destination.iconRes)
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = onNavigate,
+                                icon = {
+                                    androidx.compose.material3.Icon(
+                                        imageVector = icon,
+                                        contentDescription = label,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                label = { Text(text = label) },
+                                colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -238,6 +295,8 @@ fun AppNavigation(
                                 appConfigAdMessage = appConfigAdMessage,
                                 boostLink = appConfigBoostLink,
                                 logoLinks = appConfigLogoLinks,
+                                uiStyle = uiStyle,
+                                onUiStyleChange = onUiStyleChange,
                                 readAllSectors = readAllSectors,
                                 onReadAllSectorsChange = onReadAllSectorsChange,
                                 saveKeysToFile = saveKeysToFile,

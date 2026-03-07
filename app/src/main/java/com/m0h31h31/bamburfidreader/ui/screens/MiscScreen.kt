@@ -26,7 +26,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,7 +49,10 @@ import androidx.compose.ui.unit.dp
 import com.m0h31h31.bamburfidreader.R
 import com.m0h31h31.bamburfidreader.ui.components.NeuButton
 import com.m0h31h31.bamburfidreader.ui.components.NeuPanel
+import com.m0h31h31.bamburfidreader.ui.components.AppSwitch
 import com.m0h31h31.bamburfidreader.ui.components.neuBackground
+import com.m0h31h31.bamburfidreader.ui.theme.AppUiStyle
+import com.m0h31h31.bamburfidreader.ui.theme.LocalAppUiStyle
 import com.m0h31h31.bamburfidreader.utils.ConfigManager
 import kotlinx.coroutines.delay
 
@@ -60,6 +62,10 @@ private enum class StatusTone {
     WARNING,
     INFO
 }
+
+private const val MISC_PREFS = "misc_screen_prefs"
+private const val KEY_DISMISSED_NOTICE_MESSAGE = "dismissed_notice_message"
+private const val KEY_DISMISSED_AD_MESSAGE = "dismissed_ad_message"
 
 private fun resolveStatusTone(message: String): StatusTone {
     val text = message.lowercase()
@@ -71,12 +77,27 @@ private fun resolveStatusTone(message: String): StatusTone {
     }
 }
 
+private fun normalizeConfigMessage(message: String): String {
+    return message
+        .replace("\r\n", "\n")
+        .trim()
+}
+
 @Composable
 private fun statusToneColor(tone: StatusTone): Color {
+    val uiStyle = LocalAppUiStyle.current
     return when (tone) {
-        StatusTone.SUCCESS -> Color(0xFF2E8B57)
+        StatusTone.SUCCESS -> if (uiStyle == AppUiStyle.MIUIX) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            Color(0xFF2E8B57)
+        }
         StatusTone.ERROR -> MaterialTheme.colorScheme.error
-        StatusTone.WARNING -> Color(0xFFB7791F)
+        StatusTone.WARNING -> if (uiStyle == AppUiStyle.MIUIX) {
+            MaterialTheme.colorScheme.tertiary
+        } else {
+            Color(0xFFB7791F)
+        }
         StatusTone.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 }
@@ -98,6 +119,8 @@ fun MiscScreen(
     appConfigAdMessage: String = "",
     boostLink: ConfigManager.AppLinkConfig = ConfigManager.AppLinkConfig("", ""),
     logoLinks: Map<String, ConfigManager.AppLinkConfig> = emptyMap(),
+    uiStyle: AppUiStyle = AppUiStyle.NEUMORPHIC,
+    onUiStyleChange: (AppUiStyle) -> Unit = {},
     readAllSectors: Boolean = false,
     onReadAllSectorsChange: (Boolean) -> Unit = {},
     saveKeysToFile: Boolean = false,
@@ -111,6 +134,9 @@ fun MiscScreen(
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+    val miscPrefs = remember(context) {
+        context.getSharedPreferences(MISC_PREFS, android.content.Context.MODE_PRIVATE)
+    }
     val logoOrder = remember {
         listOf("makerworld", "douyin", "qq", "gitee", "github")
     }
@@ -119,18 +145,38 @@ fun MiscScreen(
             context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
         }.getOrDefault("")
     }
+    val normalizedNoticeMessage = remember(appConfigMessage) {
+        normalizeConfigMessage(appConfigMessage)
+    }
+    val normalizedAdMessage = remember(appConfigAdMessage) {
+        normalizeConfigMessage(appConfigAdMessage)
+    }
     var message by remember { mutableStateOf("") }
     var visibleStatusMessage by remember { mutableStateOf("") }
     var lastMiscStatusMessage by remember { mutableStateOf(miscStatusMessage) }
     var lastPageMessage by remember { mutableStateOf(message) }
     var dismissedStatusMessage by rememberSaveable { mutableStateOf("") }
+    var dismissedNoticeMessage by remember {
+        mutableStateOf(miscPrefs.getString(KEY_DISMISSED_NOTICE_MESSAGE, "").orEmpty())
+    }
+    var dismissedAdMessage by remember {
+        mutableStateOf(miscPrefs.getString(KEY_DISMISSED_AD_MESSAGE, "").orEmpty())
+    }
     var showReadAllSectorsDialog by remember { mutableStateOf(false) }
     var showImportDatabaseConfirmDialog by remember { mutableStateOf(false) }
     var showClearSelfTagsConfirmDialog by remember { mutableStateOf(false) }
     var versionTapCount by rememberSaveable { mutableStateOf(0) }
     var versionEggVisible by remember { mutableStateOf(false) }
     var versionEggNonce by remember { mutableStateOf(0) }
-    val versionEggPalette = remember {
+    val versionEggPalette = if (uiStyle == AppUiStyle.MIUIX) {
+        listOf(
+            MaterialTheme.colorScheme.primaryContainer,
+            MaterialTheme.colorScheme.secondaryContainer,
+            MaterialTheme.colorScheme.tertiaryContainer,
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+        )
+    } else {
         listOf(
             Color(0xFFE8F2FF),
             Color(0xFFFFF4DD),
@@ -265,8 +311,38 @@ fun MiscScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(text = stringResource(R.string.misc_ui_style))
+                            Text(
+                                text = if (uiStyle == AppUiStyle.MIUIX) {
+                                    stringResource(R.string.misc_ui_style_miuix)
+                                } else {
+                                    stringResource(R.string.misc_ui_style_neumorphism)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        AppSwitch(
+                            checked = uiStyle == AppUiStyle.MIUIX,
+                            onCheckedChange = {
+                                onUiStyleChange(
+                                    if (it) AppUiStyle.MIUIX else AppUiStyle.NEUMORPHIC
+                                )
+                            }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
                         Text(text = stringResource(R.string.misc_read_all_sectors))
-                        Switch(
+                        AppSwitch(
                             checked = readAllSectors,
                             onCheckedChange = ::handleReadAllSectorsChange
                         )
@@ -278,7 +354,7 @@ fun MiscScreen(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
                         Text(text = stringResource(R.string.misc_save_keys))
-                        Switch(
+                        AppSwitch(
                             checked = saveKeysToFile,
                             onCheckedChange = onSaveKeysToFileChange
                         )
@@ -392,7 +468,7 @@ fun MiscScreen(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
                     Text(text = stringResource(R.string.misc_format_debug))
-                    Switch(
+                    AppSwitch(
                         checked = formatTagDebugEnabled,
                         onCheckedChange = onFormatTagDebugEnabledChange
                     )
@@ -428,7 +504,7 @@ fun MiscScreen(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
                     Text(text = stringResource(R.string.misc_force_overwrite_import))
-                    Switch(
+                    AppSwitch(
                         checked = forceOverwriteImport,
                         onCheckedChange = onForceOverwriteImportChange
                     )
@@ -477,17 +553,36 @@ fun MiscScreen(
                 }
             }
 
-            if (appConfigMessage.isNotBlank()) {
+            val visibleNoticeMessage = normalizedNoticeMessage.takeIf {
+                it.isNotBlank() && it != dismissedNoticeMessage
+            }
+            if (visibleNoticeMessage != null) {
                 NeuPanel(modifier = Modifier.fillMaxWidth()) {
                     SelectionContainer {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.misc_notice_title),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                TextButton(
+                                    onClick = {
+                                        dismissedNoticeMessage = visibleNoticeMessage
+                                        miscPrefs.edit()
+                                            .putString(KEY_DISMISSED_NOTICE_MESSAGE, visibleNoticeMessage)
+                                            .apply()
+                                    }
+                                ) {
+                                    Text(text = stringResource(R.string.action_hide))
+                                }
+                            }
                             Text(
-                                text = stringResource(R.string.misc_notice_title),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = appConfigMessage,
+                                text = visibleNoticeMessage,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -496,17 +591,36 @@ fun MiscScreen(
                 }
             }
 
-            if (appConfigAdMessage.isNotBlank()) {
+            val visibleAdMessage = normalizedAdMessage.takeIf {
+                it.isNotBlank() && it != dismissedAdMessage
+            }
+            if (visibleAdMessage != null) {
                 NeuPanel(modifier = Modifier.fillMaxWidth()) {
                     SelectionContainer {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.misc_ad_title),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                TextButton(
+                                    onClick = {
+                                        dismissedAdMessage = visibleAdMessage
+                                        miscPrefs.edit()
+                                            .putString(KEY_DISMISSED_AD_MESSAGE, visibleAdMessage)
+                                            .apply()
+                                    }
+                                ) {
+                                    Text(text = stringResource(R.string.action_hide))
+                                }
+                            }
                             Text(
-                                text = stringResource(R.string.misc_ad_title),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = appConfigAdMessage,
+                                text = visibleAdMessage,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )

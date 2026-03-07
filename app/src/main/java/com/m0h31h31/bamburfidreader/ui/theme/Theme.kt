@@ -6,7 +6,11 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.unit.dp
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.theme.darkColorScheme as miuixDarkColorScheme
+import top.yukonga.miuix.kmp.theme.lightColorScheme as miuixLightColorScheme
 
 private val ColorError = Coral.copy(alpha = 0.95f)
 
@@ -51,17 +55,69 @@ private val AppShapes = Shapes(
     extraLarge = RoundedCornerShape(36.dp)
 )
 
+private val MiuixLightColorScheme = lightColorScheme(
+    primary = BlueGrey,
+    onPrimary = Mist,
+    secondary = Ocean,
+    tertiary = Mint,
+    background = ColorWhiteAlt,
+    surface = ColorWhite,
+    surfaceVariant = ColorWhite,
+    onBackground = Ink,
+    onSurface = Ink,
+    onSurfaceVariant = Steel,
+    outline = Cloud,
+    outlineVariant = Cloud.copy(alpha = 0.8f),
+    error = ColorError,
+    errorContainer = Coral.copy(alpha = 0.14f),
+    onErrorContainer = Ink
+)
+
+private val MiuixDarkColorScheme = darkColorScheme(
+    primary = DarkOcean,
+    onPrimary = DarkMist,
+    secondary = Mint,
+    background = DarkMist,
+    surface = DarkFrost,
+    surfaceVariant = DarkCloud,
+    onBackground = DarkInk,
+    onSurface = DarkInk,
+    onSurfaceVariant = DarkSteel,
+    outline = DarkCloud,
+    outlineVariant = DarkSteel.copy(alpha = 0.35f),
+    error = ColorError
+)
+
 @Composable
 fun BambuRfidReaderTheme(
     darkTheme: Boolean = false,
     dynamicColor: Boolean = false,
+    uiStyle: AppUiStyle = AppUiStyle.NEUMORPHIC,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        shapes = AppShapes,
-        content = content
-    )
+    val colorScheme = when (uiStyle) {
+        AppUiStyle.NEUMORPHIC -> if (darkTheme) DarkColorScheme else LightColorScheme
+        AppUiStyle.MIUIX -> if (darkTheme) MiuixDarkColorScheme else MiuixLightColorScheme
+    }
+    CompositionLocalProvider(LocalAppUiStyle provides uiStyle) {
+        if (uiStyle == AppUiStyle.MIUIX) {
+            MiuixTheme(
+                colors = if (darkTheme) miuixDarkColorScheme() else miuixLightColorScheme()
+            ) {
+                MaterialTheme(
+                    colorScheme = colorScheme,
+                    typography = Typography,
+                    shapes = AppShapes,
+                    content = content
+                )
+            }
+        } else {
+            MaterialTheme(
+                colorScheme = colorScheme,
+                typography = Typography,
+                shapes = AppShapes,
+                content = content
+            )
+        }
+    }
 }

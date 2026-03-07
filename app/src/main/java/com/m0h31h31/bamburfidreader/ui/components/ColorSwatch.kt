@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
+import com.m0h31h31.bamburfidreader.ui.theme.AppUiStyle
+import com.m0h31h31.bamburfidreader.ui.theme.LocalAppUiStyle
 import com.m0h31h31.bamburfidreader.util.parseColorValue
 import kotlin.math.roundToInt
 
@@ -25,13 +27,22 @@ private fun needsCheckerboard(colors: List<Color>): Boolean {
 
 @Composable
 private fun CheckerboardBackground(modifier: Modifier = Modifier) {
+    val uiStyle = LocalAppUiStyle.current
+    val light = if (uiStyle == AppUiStyle.MIUIX) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        Color(0xFFF5F5F5)
+    }
+    val dark = if (uiStyle == AppUiStyle.MIUIX) {
+        MaterialTheme.colorScheme.surfaceVariant
+    } else {
+        Color(0xFFE1E1E1)
+    }
     Canvas(modifier = modifier) {
         val tileSize = 6.dp.toPx()
         if (tileSize <= 0f) return@Canvas
         val columns = (size.width / tileSize).roundToInt() + 1
         val rows = (size.height / tileSize).roundToInt() + 1
-        val light = Color(0xFFF5F5F5)
-        val dark = Color(0xFFE1E1E1)
         for (y in 0 until rows) {
             for (x in 0 until columns) {
                 drawRect(
@@ -50,6 +61,7 @@ fun ColorSwatch(
     colorType: String,
     modifier: Modifier = Modifier
 ) {
+    val uiStyle = LocalAppUiStyle.current
     val parsedColors = colorValues.mapNotNull { parseColorValue(it) }
     val colors = if (parsedColors.isNotEmpty()) {
         parsedColors
@@ -63,6 +75,11 @@ fun ColorSwatch(
     }
     val shape = RoundedCornerShape(14.dp)
     val showCheckerboard = needsCheckerboard(colors)
+    val borderColor = if (uiStyle == AppUiStyle.MIUIX) {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)
+    } else {
+        Color.White.copy(alpha = 0.65f)
+    }
 
     when (resolvedType) {
         "渐变色" -> {
@@ -70,7 +87,7 @@ fun ColorSwatch(
                 modifier = modifier
                     .neuCard(shape = shape)
                     .clip(shape)
-                    .border(1.dp, Color.White.copy(alpha = 0.65f), shape)
+                    .border(1.dp, borderColor, shape)
             ) {
                 if (showCheckerboard) {
                     CheckerboardBackground(modifier = Modifier.fillMaxSize())
@@ -110,7 +127,7 @@ fun ColorSwatch(
                 modifier = modifier
                     .neuCard(shape = shape)
                     .clip(shape)
-                    .border(1.dp, Color.White.copy(alpha = 0.65f), shape)
+                    .border(1.dp, borderColor, shape)
             ) {
                 if (showCheckerboard) {
                     CheckerboardBackground(modifier = Modifier.fillMaxSize())

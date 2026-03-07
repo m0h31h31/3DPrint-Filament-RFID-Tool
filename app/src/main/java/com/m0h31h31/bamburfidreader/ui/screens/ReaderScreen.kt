@@ -9,12 +9,11 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.background
 import android.widget.Toast
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,10 +65,14 @@ import com.m0h31h31.bamburfidreader.logDebug
 import com.m0h31h31.bamburfidreader.openTtsSettings
 import com.m0h31h31.bamburfidreader.ui.components.ColorSwatch
 import com.m0h31h31.bamburfidreader.ui.components.InfoLine
+import com.m0h31h31.bamburfidreader.ui.components.AppSlider
+import com.m0h31h31.bamburfidreader.ui.components.AppSwitch
 import com.m0h31h31.bamburfidreader.ui.components.NeuButton
 import com.m0h31h31.bamburfidreader.ui.components.NeuPanel
 import com.m0h31h31.bamburfidreader.ui.components.neuBackground
+import com.m0h31h31.bamburfidreader.ui.theme.AppUiStyle
 import com.m0h31h31.bamburfidreader.ui.theme.BambuRfidReaderTheme
+import com.m0h31h31.bamburfidreader.ui.theme.LocalAppUiStyle
 import com.m0h31h31.bamburfidreader.util.parseColorValue
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -90,7 +93,15 @@ fun ReaderScreen(
     onRemainingChange: (String, Float, Int?) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val meritToastPalette = remember {
+    val uiStyle = LocalAppUiStyle.current
+    val meritToastPalette = if (uiStyle == AppUiStyle.MIUIX) {
+        listOf(
+            MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer,
+            MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer,
+            MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer,
+            MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurface
+        )
+    } else {
         listOf(
             Color(0xFFE8F5E9) to Color(0xFF2E7D32),
             Color(0xFFE3F2FD) to Color(0xFF1565C0),
@@ -187,7 +198,7 @@ fun ReaderScreen(
                             Row(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Switch(
+                                AppSwitch(
                                     checked = voiceEnabled,
                                     onCheckedChange = onVoiceEnabledChange,
                                     modifier = Modifier.scale(0.8f),
@@ -297,21 +308,36 @@ fun ReaderScreen(
                                         }
                                 )
                                 if (trayUidAvailable) {
+                                    val outboundContainerColor = if (uiStyle == AppUiStyle.MIUIX) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.errorContainer
+                                    }
+                                    val outboundContentColor = if (uiStyle == AppUiStyle.MIUIX) {
+                                        MaterialTheme.colorScheme.onError
+                                    } else {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    }
                                     Box(
                                         modifier = Modifier
                                             .align(Alignment.TopEnd)
-                                            .padding(4.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(MaterialTheme.colorScheme.errorContainer)
+                                            .padding(6.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(outboundContainerColor)
+                                            .border(
+                                                width = 1.dp,
+                                                color = outboundContentColor.copy(alpha = 0.18f),
+                                                shape = RoundedCornerShape(12.dp)
+                                            )
                                             .clickable { showOutboundConfirm = true },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = stringResource(R.string.reader_outbound),
-                                            color = MaterialTheme.colorScheme.onErrorContainer,
-                                            fontSize = 10.sp,
+                                            color = outboundContentColor,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                         )
                                     }
                                 }
@@ -425,38 +451,47 @@ fun ReaderScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Slider(
-                                value = gramsValue,
-                                onValueChange = { value ->
-                                    if (trayUidAvailable && hasWeight) {
-                                        val next = value.roundToInt().coerceIn(0, totalWeight)
-                                        gramsValue = next.toFloat()
-                                        gramsText = next.toString()
-                                    }
-                                },
-                                valueRange = 0f..(if (hasWeight) totalWeight.toFloat() else 1f),
-                                enabled = trayUidAvailable && hasWeight,
+                            Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(30.dp).padding(0.dp,3.dp),
-                                onValueChangeFinished = {
-                                    if (trayUidAvailable && hasWeight) {
-                                        // 使用最终的gramsValue计算准确的百分比和克重
-                                        val finalGrams = gramsValue.roundToInt().coerceIn(0, totalWeight)
-                                        val finalPercent = if (totalWeight > 0) {
-                                            ((finalGrams * 100f / totalWeight) * 10).roundToInt() / 10f
-                                        } else {
-                                            0f
+                                    .padding(vertical = 3.dp)
+                            ) {
+                                AppSlider(
+                                    value = gramsValue,
+                                    onValueChange = { value ->
+                                        if (trayUidAvailable && hasWeight) {
+                                            val next = value.roundToInt().coerceIn(0, totalWeight)
+                                            gramsValue = next.toFloat()
+                                            gramsText = next.toString()
                                         }
-                                        onRemainingChange(state.trayUidHex, finalPercent, finalGrams)
+                                    },
+                                    valueRange = 0f..(if (hasWeight) totalWeight.toFloat() else 1f),
+                                    enabled = trayUidAvailable && hasWeight,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(30.dp),
+                                    onValueChangeFinished = {
+                                        if (trayUidAvailable && hasWeight) {
+                                            // 使用最终的gramsValue计算准确的百分比和克重
+                                            val finalGrams = gramsValue.roundToInt().coerceIn(0, totalWeight)
+                                            val finalPercent = if (totalWeight > 0) {
+                                                ((finalGrams * 100f / totalWeight) * 10).roundToInt() / 10f
+                                            } else {
+                                                0f
+                                            }
+                                            onRemainingChange(state.trayUidHex, finalPercent, finalGrams)
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
 
                             Text(
                                 text = String.format("%.1f%%", percentValue),
                                 style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(start = 8.dp)
+                                modifier = Modifier
+                                    .padding(start = 8.dp)
+                                    .width(56.dp),
+                                textAlign = TextAlign.End
                             )
                         }
 //                        if (!trayUidAvailable) {

@@ -1,6 +1,7 @@
 package com.m0h31h31.bamburfidreader.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -29,7 +30,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -42,10 +42,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
 import com.m0h31h31.bamburfidreader.ui.components.ColorSwatch
+import com.m0h31h31.bamburfidreader.ui.components.AppCircularProgressIndicator
+import com.m0h31h31.bamburfidreader.ui.components.AppSearchBar
 import com.m0h31h31.bamburfidreader.ui.components.NeuButton
 import com.m0h31h31.bamburfidreader.ui.components.NeuPanel
-import com.m0h31h31.bamburfidreader.ui.components.NeuTextField
 import com.m0h31h31.bamburfidreader.ui.components.neuBackground
+import com.m0h31h31.bamburfidreader.ui.theme.AppUiStyle
+import com.m0h31h31.bamburfidreader.ui.theme.LocalAppUiStyle
 
 private val tagItemShape = RoundedCornerShape(24.dp)
 
@@ -101,6 +104,7 @@ fun TagScreen(
     onCancelWrite: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val uiStyle = LocalAppUiStyle.current
     var query by remember { mutableStateOf("") }
     var selectedFileName by remember { mutableStateOf<String?>(null) }
     var hintMessage by remember { mutableStateOf("") }
@@ -153,10 +157,10 @@ fun TagScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                NeuTextField(
+                AppSearchBar(
                     value = query,
                     onValueChange = { query = it },
-                    label = stringResource(R.string.tag_search_placeholder),
+                    placeholder = stringResource(R.string.tag_search_placeholder),
                     modifier = Modifier.weight(1f)
                 )
                 NeuButton(
@@ -205,6 +209,18 @@ fun TagScreen(
                     ) {
                         items(filteredItems, key = { it.relativePath }) { item ->
                             val selected = item.relativePath == selectedFileName
+                            val selectedFillColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                            val selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.26f)
+                            val titleColor = if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            }
+                            val subtitleColor = if (selected) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.82f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
                             val dismissState = rememberSwipeToDismissBoxState(
                                 confirmValueChange = { value ->
                                     if (value == SwipeToDismissBoxValue.EndToStart) {
@@ -218,19 +234,29 @@ fun TagScreen(
                             SwipeToDismissBox(
                                 state = dismissState,
                                 backgroundContent = {
+                                    val deleteColor = if (uiStyle == AppUiStyle.MIUIX) {
+                                        MaterialTheme.colorScheme.errorContainer
+                                    } else {
+                                        Color(0xFFE54D4D)
+                                    }
+                                    val deleteTextColor = if (uiStyle == AppUiStyle.MIUIX) {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    } else {
+                                        Color.White
+                                    }
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .padding(vertical = 3.dp)
                                             .clip(tagItemShape)
-                                            .background(Color(0xFFE54D4D))
+                                            .background(deleteColor)
                                             .padding(horizontal = 16.dp),
                                         contentAlignment = Alignment.CenterEnd
                                     ) {
                                         Text(
                                             text = stringResource(R.string.action_delete),
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = Color.White,
+                                            color = deleteTextColor,
                                             fontWeight = FontWeight.SemiBold
                                         )
                                     }
@@ -246,14 +272,32 @@ fun TagScreen(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
+                                            .clip(tagItemShape)
+                                            .background(if (selected) selectedFillColor else Color.Transparent)
+                                            .border(
+                                                width = if (selected) 1.dp else 0.dp,
+                                                color = if (selected) selectedBorderColor else Color.Transparent,
+                                                shape = tagItemShape
+                                            )
                                             .padding(horizontal = 10.dp, vertical = 7.dp),
                                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(4.dp)
+                                                .height(36.dp)
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(
+                                                    if (selected) MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
+                                                )
+                                        )
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 text = item.materialType.ifBlank { unknownText },
-                                                style = MaterialTheme.typography.bodyMedium
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = titleColor
                                             )
                                             Text(
                                                 text = stringResource(
@@ -262,7 +306,7 @@ fun TagScreen(
                                                     item.colorUid.ifBlank { unknownColorIdText }
                                                 ),
                                                 fontSize = 12.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                color = subtitleColor
                                             )
                                         }
                                         Row(
@@ -271,7 +315,8 @@ fun TagScreen(
                                         ) {
                                             Text(
                                                 text = item.colorName.ifBlank { unknownColorText },
-                                                fontSize = 12.sp
+                                                fontSize = 12.sp,
+                                                color = titleColor
                                             )
                                             ColorSwatch(
                                                 colorValues = item.colorValues,
@@ -292,7 +337,7 @@ fun TagScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), strokeWidth = 2.dp)
+                            AppCircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp))
                             Text(text = stringResource(R.string.tag_loading_shared_data), fontSize = 11.sp)
                         }
                     }
