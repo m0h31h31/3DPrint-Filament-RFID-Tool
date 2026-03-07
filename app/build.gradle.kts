@@ -28,8 +28,8 @@ android {
         applicationId = "com.m0h31h31.bamburfidreader"
         minSdk = 28
         targetSdk = 36
-        versionCode = 2
-        versionName = "2.9"
+        versionCode = 3
+        versionName = "3.0"
         val eventApiKey = localProperties.getProperty("EVENT_API_KEY", "")
         buildConfigField("String", "EVENT_API_KEY", "\"${escapeBuildConfigString(eventApiKey)}\"")
 

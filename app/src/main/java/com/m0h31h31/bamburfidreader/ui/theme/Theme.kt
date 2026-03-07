@@ -7,6 +7,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.darkColorScheme as miuixDarkColorScheme
@@ -73,6 +74,21 @@ private val MiuixLightColorScheme = lightColorScheme(
     onErrorContainer = Ink
 )
 
+private val MiuixLightColors = miuixLightColorScheme(
+    background = ColorWhiteAlt,
+    surface = ColorWhite,
+    surfaceVariant = ColorWhite,
+    surfaceContainer = ColorWhite,
+    surfaceContainerHigh = Color(0xFFF2F4F7),
+    surfaceContainerHighest = Color(0xFFECEFF4),
+    dividerLine = Cloud.copy(alpha = 0.65f),
+    onSurface = Ink.copy(alpha = 0.92f),
+    onSurfaceContainer = Color(0xFF6C7B90),
+    onSurfaceContainerVariant = Color(0xFFA6B0BE),
+    onSurfaceContainerHigh = Color(0xFFB0B8C3),
+    onSurfaceContainerHighest = Color(0xFF667589),
+)
+
 private val MiuixDarkColorScheme = darkColorScheme(
     primary = DarkOcean,
     onPrimary = DarkMist,
@@ -86,6 +102,11 @@ private val MiuixDarkColorScheme = darkColorScheme(
     outline = DarkCloud,
     outlineVariant = DarkSteel.copy(alpha = 0.35f),
     error = ColorError
+)
+
+private val MiuixDarkColors = miuixDarkColorScheme(
+    onSurfaceContainer = DarkInk.copy(alpha = 0.92f),
+    onSurfaceContainerVariant = DarkSteel.copy(alpha = 0.78f)
 )
 
 @Composable
@@ -102,7 +123,7 @@ fun BambuRfidReaderTheme(
     CompositionLocalProvider(LocalAppUiStyle provides uiStyle) {
         if (uiStyle == AppUiStyle.MIUIX) {
             MiuixTheme(
-                colors = if (darkTheme) miuixDarkColorScheme() else miuixLightColorScheme()
+                colors = if (darkTheme) MiuixDarkColors else MiuixLightColors
             ) {
                 MaterialTheme(
                     colorScheme = colorScheme,

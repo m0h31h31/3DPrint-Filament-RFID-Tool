@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.m0h31h31.bamburfidreader.ui.theme.AppUiStyle
 import com.m0h31h31.bamburfidreader.ui.theme.LocalAppUiStyle
+import com.m0h31h31.bamburfidreader.ui.components.neuCard
 import com.m0h31h31.bamburfidreader.util.parseColorValue
 import kotlin.math.roundToInt
 
@@ -29,12 +30,12 @@ private fun needsCheckerboard(colors: List<Color>): Boolean {
 private fun CheckerboardBackground(modifier: Modifier = Modifier) {
     val uiStyle = LocalAppUiStyle.current
     val light = if (uiStyle == AppUiStyle.MIUIX) {
-        MaterialTheme.colorScheme.surface
+        Color(0xFFF2F3F5)
     } else {
         Color(0xFFF5F5F5)
     }
     val dark = if (uiStyle == AppUiStyle.MIUIX) {
-        MaterialTheme.colorScheme.surfaceVariant
+        Color(0xFFD9DEE6)
     } else {
         Color(0xFFE1E1E1)
     }
@@ -80,13 +81,16 @@ fun ColorSwatch(
     } else {
         Color.White.copy(alpha = 0.65f)
     }
+    val containerModifier = if (uiStyle == AppUiStyle.MIUIX) {
+        modifier.clip(shape)
+    } else {
+        modifier.neuCard(shape = shape).clip(shape)
+    }
 
     when (resolvedType) {
         "渐变色" -> {
             Box(
-                modifier = modifier
-                    .neuCard(shape = shape)
-                    .clip(shape)
+                modifier = containerModifier
                     .border(1.dp, borderColor, shape)
             ) {
                 if (showCheckerboard) {
@@ -102,9 +106,8 @@ fun ColorSwatch(
 
         "多拼色" -> {
             Box(
-                modifier = modifier
-                    .clip(shape)
-                    .neuCard(shape = shape)
+                modifier = containerModifier
+                    .border(1.dp, borderColor, shape)
             ) {
                 if (showCheckerboard) {
                     CheckerboardBackground(modifier = Modifier.fillMaxSize())
@@ -124,9 +127,7 @@ fun ColorSwatch(
 
         else -> {
             Box(
-                modifier = modifier
-                    .neuCard(shape = shape)
-                    .clip(shape)
+                modifier = containerModifier
                     .border(1.dp, borderColor, shape)
             ) {
                 if (showCheckerboard) {

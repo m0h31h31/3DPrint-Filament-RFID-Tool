@@ -22,11 +22,33 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.lifecycle.lifecycleScope
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.m0h31h31.bamburfidreader.ui.navigation.AppNavigation
 import com.m0h31h31.bamburfidreader.ui.screens.NdefWriteRequest
 import com.m0h31h31.bamburfidreader.ui.screens.NdefWriteType
@@ -84,6 +106,8 @@ private const val RW_RECONNECT_DELAY_MS = 35L
 private const val UI_PREFS_NAME = "ui_prefs"
 private const val KEY_VOICE_ENABLED = "voice_enabled"
 private const val KEY_UI_STYLE = "ui_style"
+private const val KEY_USER_AGREEMENT_VERSION = "user_agreement_version"
+private const val CURRENT_USER_AGREEMENT_VERSION = 1
 private val WRITE_HKDF_SALT = byteArrayOf(
     0x9a.toByte(), 0x75.toByte(), 0x9c.toByte(), 0xf2.toByte(),
     0xc4.toByte(), 0xf7.toByte(), 0xca.toByte(), 0xff.toByte(),
@@ -92,6 +116,66 @@ private val WRITE_HKDF_SALT = byteArrayOf(
 )
 private val WRITE_INFO_A = "RFID-A\u0000".toByteArray(Charsets.US_ASCII)
 private val WRITE_INFO_B = "RFID-B\u0000".toByteArray(Charsets.US_ASCII)
+
+@Composable
+private fun UserAgreementDialog(
+    onDecline: () -> Unit,
+    onAccept: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.user_agreement_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = stringResource(R.string.user_agreement_summary),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                SelectionContainer {
+                    Text(
+                        text = stringResource(R.string.user_agreement_content),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+                ) {
+                    OutlinedButton(onClick = onDecline) {
+                        Text(text = stringResource(R.string.user_agreement_decline))
+                    }
+                    Button(onClick = onAccept) {
+                        Text(text = stringResource(R.string.user_agreement_accept))
+                    }
+                }
+            }
+        }
+    }
+}
 
 object LogCollector {
     private val lock = Any()
@@ -524,6 +608,9 @@ class MainActivity : ComponentActivity() {
         uiStyle = runCatching {
             AppUiStyle.valueOf(uiPrefs.getString(KEY_UI_STYLE, AppUiStyle.NEUMORPHIC.name).orEmpty())
         }.getOrDefault(AppUiStyle.NEUMORPHIC)
+        var showUserAgreement by mutableStateOf(
+            uiPrefs.getInt(KEY_USER_AGREEMENT_VERSION, 0) < CURRENT_USER_AGREEMENT_VERSION
+        )
         LogCollector.init(this)
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
         filamentDbHelper = FilamentDbHelper(this)
@@ -677,6 +764,19 @@ class MainActivity : ComponentActivity() {
                 }
                 if (shouldNavigateToTag) {
                     shouldNavigateToTag = false
+                }
+                if (showUserAgreement) {
+                    UserAgreementDialog(
+                        onDecline = {
+                            finishAffinity()
+                        },
+                        onAccept = {
+                            uiPrefs.edit()
+                                .putInt(KEY_USER_AGREEMENT_VERSION, CURRENT_USER_AGREEMENT_VERSION)
+                                .apply()
+                            showUserAgreement = false
+                        }
+                    )
                 }
             }
         }
