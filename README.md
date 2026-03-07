@@ -4,6 +4,13 @@
 
 ------
 
+## 📲 下载地址
+
+### 👉️[gitee releases](https://gitee.com/JackMoHeiHei/BambuRfidReader/releases) 	👉️[github releases](https://github.com/m0h31h31/BambuRfidReader/releases) 
+
+------
+
+
 ## ✅ 运行环境
 
 - Android 10+
@@ -17,12 +24,6 @@
 - 📦 **耗材库存管理（入库 / 出库 / 统计）**
 - ⏺ **复制写入标签数据**
 - 🧰 **杂项工具：标签完整数据导出、秘钥导出、数据库备份/导入、标签数据打包/导入、格式化标签**
-
-------
-
-## 📲 下载地址
-
-### 👉️[gitee releases](https://gitee.com/JackMoHeiHei/BambuRfidReader/releases) 	👉️[github releases](https://github.com/m0h31h31/BambuRfidReader/releases) 
 
 ------
 
