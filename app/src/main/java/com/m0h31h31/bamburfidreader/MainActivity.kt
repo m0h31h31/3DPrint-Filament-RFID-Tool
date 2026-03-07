@@ -32,6 +32,7 @@ import com.m0h31h31.bamburfidreader.ui.screens.NdefWriteRequest
 import com.m0h31h31.bamburfidreader.ui.screens.NdefWriteType
 import com.m0h31h31.bamburfidreader.ui.theme.BambuRfidReaderTheme
 import com.m0h31h31.bamburfidreader.util.normalizeColorValue
+import com.m0h31h31.bamburfidreader.utils.AnalyticsReporter
 import com.m0h31h31.bamburfidreader.utils.ConfigManager
 import java.io.File
 import java.io.FileInputStream
@@ -312,6 +313,19 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    private val exportTagPackageLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument(SHARE_IMPORT_ZIP_MIME)) { uri: Uri? ->
+            if (uri == null) {
+                miscStatusMessage = "已取消导出标签包"
+                return@registerForActivityResult
+            }
+            lifecycleScope.launch(Dispatchers.IO) {
+                val result = exportSelfTagPackageToUri(uri)
+                withContext(Dispatchers.Main) {
+                    miscStatusMessage = result
+                }
+            }
+        }
 
     private fun resetDebugInfoDialog(title: String = "调试信息") {
         synchronized(debugInfoLock) {
@@ -513,6 +527,9 @@ class MainActivity : ComponentActivity() {
         uiState = NfcUiState(status = initialStatus())
         logEvent("应用启动")
         logDeviceInfo()
+        lifecycleScope.launch(Dispatchers.IO) {
+            AnalyticsReporter.reportInstallAndLaunch(this@MainActivity)
+        }
         
         // 检查并更新配置文件
         checkAndUpdateConfig()
@@ -695,19 +712,6 @@ class MainActivity : ComponentActivity() {
                 } else {
                     tagPreselectedFileName = null
                     writeStatusMessage = uiString(R.string.copy_recovery_not_found, uid)
-                }
-            }
-        }
-    private val exportTagPackageLauncher =
-        registerForActivityResult(ActivityResultContracts.CreateDocument(SHARE_IMPORT_ZIP_MIME)) { uri: Uri? ->
-            if (uri == null) {
-                miscStatusMessage = "已取消导出标签包"
-                return@registerForActivityResult
-            }
-            lifecycleScope.launch(Dispatchers.IO) {
-                val result = exportSelfTagPackageToUri(uri)
-                withContext(Dispatchers.Main) {
-                    miscStatusMessage = result
                 }
             }
         }

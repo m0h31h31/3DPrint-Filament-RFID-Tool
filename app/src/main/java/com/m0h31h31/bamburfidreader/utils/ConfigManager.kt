@@ -290,6 +290,19 @@ object ConfigManager {
         }
     }
 
+    fun getAppConfigUserCountEndpoint(context: Context): AppLinkConfig? {
+        val configContent = getLocalConfig(context, APP_CONFIG_FILE) ?: return null
+        return try {
+            val json = JSONObject(configContent)
+            parseLinkConfig(json, "userCountEndpoint", null)?.takeIf {
+                it.type.equals("url", ignoreCase = true) && it.value.isNotBlank()
+            }
+        } catch (e: Exception) {
+            com.m0h31h31.bamburfidreader.logDebug("Error parsing AppConfig userCountEndpoint: ${e.message}")
+            null
+        }
+    }
+
     private fun parseLinkConfig(
         json: JSONObject,
         key: String,

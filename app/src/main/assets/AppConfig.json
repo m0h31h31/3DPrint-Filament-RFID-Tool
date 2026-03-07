@@ -4,6 +4,10 @@
         "type": "scheme",
         "value": "bambulab://bbl/design/model/detail?design_id=2020787&instance_id=2253290&appSharePlatform=copy"
     },
+    "userCountEndpoint": {
+        "type": "url",
+        "value": "https://brr.jacki.cn/events"
+    },
     "logoLinks": {
         "makerworld": {
             "type": "scheme",

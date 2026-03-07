@@ -8,6 +8,7 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import org.json.JSONObject
 
 object NetworkUtils {
     private const val TIMEOUT_MS = 10000 // 10秒超时
@@ -88,6 +89,34 @@ object NetworkUtils {
         } catch (e: Exception) {
             com.m0h31h31.bamburfidreader.logDebug("Failed to calculate file hash: ${e.message}")
             null
+        }
+    }
+
+    suspend fun postJson(urlString: String, payload: JSONObject): Boolean {
+        return withContext(Dispatchers.IO) {
+            val url = URL(urlString)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.apply {
+                connectTimeout = TIMEOUT_MS
+                readTimeout = TIMEOUT_MS
+                requestMethod = "POST"
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                setRequestProperty("Accept", "application/json")
+            }
+
+            return@withContext try {
+                connection.outputStream.use { output ->
+                    output.write(payload.toString().toByteArray(Charsets.UTF_8))
+                }
+                val code = connection.responseCode
+                code in 200..299
+            } catch (e: Exception) {
+                com.m0h31h31.bamburfidreader.logDebug("Failed to POST JSON to $urlString: ${e.message}")
+                false
+            } finally {
+                connection.disconnect()
+            }
         }
     }
 }
