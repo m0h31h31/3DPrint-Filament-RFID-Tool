@@ -81,7 +81,35 @@ import kotlin.math.roundToInt
 import kotlin.random.Random
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.TextStyle
+
+@Composable
+private fun CompactField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall.merge(
+                TextStyle(color = MaterialTheme.colorScheme.onSurface)
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
+                .padding(horizontal = 10.dp, vertical = 5.dp)
+        )
+    }
+}
 
 private const val MERIT_PREFS = "merit_prefs"
 private const val MERIT_KEY_COUNT = "merit_count"
@@ -651,7 +679,7 @@ fun ReaderScreen(
                                     )
                                 }
                                 if (trayUidAvailable) {
-                                    OutlinedTextField(
+                                    CompactField(
                                         value = editOriginalMaterial,
                                         onValueChange = { newVal ->
                                             editOriginalMaterial = newVal
@@ -661,12 +689,10 @@ fun ReaderScreen(
                                                 onNotesChange(state.trayUidHex, editOriginalMaterial, editNotes)
                                             }
                                         },
-                                        label = { Text(stringResource(R.string.reader_original_material), style = MaterialTheme.typography.labelSmall) },
-                                        singleLine = true,
-                                        textStyle = MaterialTheme.typography.bodySmall,
+                                        label = stringResource(R.string.reader_original_material),
                                         modifier = Modifier.fillMaxWidth()
                                     )
-                                    OutlinedTextField(
+                                    CompactField(
                                         value = editNotes,
                                         onValueChange = { newVal ->
                                             editNotes = newVal
@@ -676,9 +702,7 @@ fun ReaderScreen(
                                                 onNotesChange(state.trayUidHex, editOriginalMaterial, editNotes)
                                             }
                                         },
-                                        label = { Text(stringResource(R.string.reader_notes), style = MaterialTheme.typography.labelSmall) },
-                                        singleLine = true,
-                                        textStyle = MaterialTheme.typography.bodySmall,
+                                        label = stringResource(R.string.reader_notes),
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }

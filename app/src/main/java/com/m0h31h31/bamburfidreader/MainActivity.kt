@@ -3758,7 +3758,6 @@ class FilamentDbHelper(context: Context) :
         colorValues: String? = null
     ) {
         val values = ContentValues()
-        values.put("tray_uid", trayUid)
         values.put("remaining_percent", remainingPercent)
         if (remainingGrams != null) {
             values.put("remaining_grams", remainingGrams)
@@ -3790,12 +3789,22 @@ class FilamentDbHelper(context: Context) :
         if (colorValues != null) {
             values.put("color_values", colorValues)
         }
-        db.insertWithOnConflict(
+        // UPDATE first to preserve original_material/notes; INSERT only for new rows.
+        val updated = db.update(
             TRAY_UID_TABLE,
-            null,
             values,
-            SQLiteDatabase.CONFLICT_REPLACE
+            "tray_uid = ?",
+            arrayOf(trayUid)
         )
+        if (updated == 0) {
+            values.put("tray_uid", trayUid)
+            db.insertWithOnConflict(
+                TRAY_UID_TABLE,
+                null,
+                values,
+                SQLiteDatabase.CONFLICT_IGNORE
+            )
+        }
     }
 
     fun getFilamentId(db: SQLiteDatabase, filaId: String, filaColorCode: String): Long? {
