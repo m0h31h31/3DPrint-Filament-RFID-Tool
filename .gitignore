@@ -13,7 +13,7 @@
 /captures
 .externalNativeBuild
 .cxx
-local.properties
+local.propertiesduosa
 使用与功能说明.md
 QA2.md
 server/*

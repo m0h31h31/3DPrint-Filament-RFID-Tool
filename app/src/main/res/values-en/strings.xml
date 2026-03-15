@@ -92,7 +92,7 @@
     <string name="tag_summary_format">Total: %1$d    Filtered: %2$d</string>
     <string name="tag_uid_color_id_format">UID: %1$s    Color ID: %2$s</string>
     <string name="tag_loading_shared_data">Loading shared data...</string>
-    <string name="tag_write_notice_title">Before writing, strictly follow these rules:</string>
+    <string name="tag_write_notice_title">Write Notes</string>
     <string name="tag_write_notice_1">1. Keep the tag firmly against the phone NFC area. Do not move it while writing.</string>
     <string name="tag_write_notice_2">2. After writing completes, remove the tag, then tap it again for verification.</string>
     <string name="tag_write_notice_3">3. Do not write to an existing tag. Duplicate tags may be recognized as the same spool.</string>
@@ -153,6 +153,13 @@
     <string name="misc_force_overwrite_import">Force overwrite imported tags</string>
     <string name="config_inventory_feature">Inventory &amp; Data</string>
     <string name="config_inventory_feature_desc">Show inventory and data pages</string>
+    <string name="config_hide_copied_tags">Hide Copied Tags</string>
+    <string name="config_hide_copied_tags_desc">Hide tags that have been successfully copied</string>
+    <string name="config_dual_tag_mode">Dual-tag Mode</string>
+    <string name="config_dual_tag_mode_desc">Hide after copying 2 times</string>
+    <string name="config_tag_view_mode">Copy Page View</string>
+    <string name="config_tag_view_list">List</string>
+    <string name="config_tag_view_category">Category</string>
     <string name="reader_original_material">Original Material</string>
     <string name="reader_notes">Notes</string>
     <string name="inventory_original_material_label">Original Material</string>

@@ -3,10 +3,12 @@ package com.m0h31h31.bamburfidreader.ui.screens
 import android.graphics.BitmapFactory
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -65,8 +67,8 @@ private enum class StatusTone {
 }
 
 private const val MISC_PREFS = "misc_screen_prefs"
-private const val KEY_DISMISSED_NOTICE_MESSAGE = "dismissed_notice_message"
-private const val KEY_DISMISSED_AD_MESSAGE = "dismissed_ad_message"
+private const val KEY_NOTICE_EXPANDED = "notice_expanded"
+private const val KEY_AD_EXPANDED = "ad_expanded"
 
 private fun resolveStatusTone(message: String): StatusTone {
     val text = message.lowercase()
@@ -136,6 +138,12 @@ fun MiscScreen(
     formatInProgress: Boolean = false,
     inventoryEnabled: Boolean = false,
     onInventoryEnabledChange: (Boolean) -> Unit = {},
+    hideCopiedTags: Boolean = true,
+    onHideCopiedTagsChange: (Boolean) -> Unit = {},
+    dualTagMode: Boolean = false,
+    onDualTagModeChange: (Boolean) -> Unit = {},
+    tagViewMode: String = "list",
+    onTagViewModeChange: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -162,11 +170,11 @@ fun MiscScreen(
     var lastMiscStatusMessage by remember { mutableStateOf(miscStatusMessage) }
     var lastPageMessage by remember { mutableStateOf(message) }
     var dismissedStatusMessage by rememberSaveable { mutableStateOf("") }
-    var dismissedNoticeMessage by remember {
-        mutableStateOf(miscPrefs.getString(KEY_DISMISSED_NOTICE_MESSAGE, "").orEmpty())
+    var noticeExpanded by remember {
+        mutableStateOf(miscPrefs.getBoolean(KEY_NOTICE_EXPANDED, true))
     }
-    var dismissedAdMessage by remember {
-        mutableStateOf(miscPrefs.getString(KEY_DISMISSED_AD_MESSAGE, "").orEmpty())
+    var adExpanded by remember {
+        mutableStateOf(miscPrefs.getBoolean(KEY_AD_EXPANDED, true))
     }
     var showReadAllSectorsDialog by remember { mutableStateOf(false) }
     var showImportDatabaseConfirmDialog by remember { mutableStateOf(false) }
@@ -436,6 +444,73 @@ fun MiscScreen(
                             onCheckedChange = onInventoryEnabledChange
                         )
                     }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(text = stringResource(R.string.config_hide_copied_tags))
+                            Text(
+                                text = stringResource(R.string.config_hide_copied_tags_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        AppSwitch(
+                            checked = hideCopiedTags,
+                            onCheckedChange = onHideCopiedTagsChange
+                        )
+                    }
+
+                    if (hideCopiedTags) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(text = stringResource(R.string.config_dual_tag_mode))
+                                Text(
+                                    text = stringResource(R.string.config_dual_tag_mode_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            AppSwitch(
+                                checked = dualTagMode,
+                                onCheckedChange = onDualTagModeChange
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Text(text = stringResource(R.string.config_tag_view_mode))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            listOf("list" to R.string.config_tag_view_list, "category" to R.string.config_tag_view_category).forEach { (mode, labelRes) ->
+                                val selected = tagViewMode == mode
+                                androidx.compose.material3.FilterChip(
+                                    selected = selected,
+                                    onClick = { onTagViewModeChange(mode) },
+                                    label = { Text(stringResource(labelRes), style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -665,77 +740,87 @@ fun MiscScreen(
                 }
             }
 
-            val visibleNoticeMessage = normalizedNoticeMessage.takeIf {
-                it.isNotBlank() && it != dismissedNoticeMessage
-            }
-            if (visibleNoticeMessage != null) {
+            if (normalizedNoticeMessage.isNotBlank()) {
                 NeuPanel(modifier = Modifier.fillMaxWidth()) {
-                    SelectionContainer {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.misc_notice_title),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                TextButton(
-                                    onClick = {
-                                        dismissedNoticeMessage = visibleNoticeMessage
-                                        miscPrefs.edit()
-                                            .putString(KEY_DISMISSED_NOTICE_MESSAGE, visibleNoticeMessage)
-                                            .apply()
-                                    }
-                                ) {
-                                    Text(text = stringResource(R.string.action_hide))
-                                }
-                            }
+                    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val v = !noticeExpanded
+                                    noticeExpanded = v
+                                    miscPrefs.edit().putBoolean(KEY_NOTICE_EXPANDED, v).apply()
+                                },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = visibleNoticeMessage,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
+                                text = stringResource(R.string.misc_notice_title),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
                             )
+                            Text(
+                                text = if (noticeExpanded) "▲" else "▼",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        AnimatedVisibility(
+                            visible = noticeExpanded,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            SelectionContainer {
+                                Text(
+                                    text = normalizedNoticeMessage,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(top = 6.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            val visibleAdMessage = normalizedAdMessage.takeIf {
-                it.isNotBlank() && it != dismissedAdMessage
-            }
-            if (visibleAdMessage != null) {
+            if (normalizedAdMessage.isNotBlank()) {
                 NeuPanel(modifier = Modifier.fillMaxWidth()) {
-                    SelectionContainer {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.misc_ad_title),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                TextButton(
-                                    onClick = {
-                                        dismissedAdMessage = visibleAdMessage
-                                        miscPrefs.edit()
-                                            .putString(KEY_DISMISSED_AD_MESSAGE, visibleAdMessage)
-                                            .apply()
-                                    }
-                                ) {
-                                    Text(text = stringResource(R.string.action_hide))
-                                }
-                            }
+                    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val v = !adExpanded
+                                    adExpanded = v
+                                    miscPrefs.edit().putBoolean(KEY_AD_EXPANDED, v).apply()
+                                },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = visibleAdMessage,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
+                                text = stringResource(R.string.misc_ad_title),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
                             )
+                            Text(
+                                text = if (adExpanded) "▲" else "▼",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        AnimatedVisibility(
+                            visible = adExpanded,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            SelectionContainer {
+                                Text(
+                                    text = normalizedAdMessage,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(top = 6.dp)
+                                )
+                            }
                         }
                     }
                 }

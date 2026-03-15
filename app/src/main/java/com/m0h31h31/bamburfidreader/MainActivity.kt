@@ -85,13 +85,14 @@ private const val LOG_TAG = "BambuRfidReader"
 private const val FILAMENT_JSON_NAME = "filaments_color_codes.json"
 private const val FILAMENTS_TYPE_MAPPING_FILE = "filaments_type_mapping.json"
 private const val FILAMENT_DB_NAME = "filaments.db"
-private const val FILAMENT_DB_VERSION = 14
+private const val FILAMENT_DB_VERSION = 16
 private const val FILAMENT_TABLE = "filaments"
 private const val FILAMENT_TYPE_MAPPING_TABLE = "filament_type_mapping"
 private const val FILAMENT_META_TABLE = "meta_v2"
 private const val FILAMENT_META_KEY_LAST_MODIFIED = "filaments_last_modified"
 private const val FILAMENT_META_KEY_LOCALE = "filaments_locale"
 private const val TRAY_UID_TABLE = "filament_inventory"
+private const val SHARE_TAGS_TABLE = "share_tags"
 private const val DEFAULT_REMAINING_PERCENT = 100
 private const val LOG_DIR_NAME = "logs"
 private const val LOG_FILE_NAME = "bambu_rfid.log"
@@ -109,6 +110,9 @@ private const val KEY_VOICE_ENABLED = "voice_enabled"
 private const val KEY_UI_STYLE = "ui_style"
 private const val KEY_THEME_MODE = "theme_mode"
 private const val KEY_INVENTORY_ENABLED = "inventory_enabled"
+private const val KEY_HIDE_COPIED_TAGS = "hide_copied_tags"
+private const val KEY_DUAL_TAG_MODE = "dual_tag_mode"
+private const val KEY_TAG_VIEW_MODE = "tag_view_mode"
 private const val KEY_USER_AGREEMENT_VERSION = "user_agreement_version"
 private const val CURRENT_USER_AGREEMENT_VERSION = 1
 private val WRITE_HKDF_SALT = byteArrayOf(
@@ -310,6 +314,26 @@ data class InventoryItem(
     val notes: String = ""
 )
 
+data class ShareTagDbMeta(
+    val id: Long = -1L,
+    val copyCount: Int = 0,
+    val verified: Boolean = false
+)
+
+data class ShareTagDbRow(
+    val id: Long,
+    val fileUid: String,
+    val trayUid: String?,
+    val materialType: String?,
+    val colorUid: String?,
+    val colorName: String?,
+    val colorType: String?,
+    val colorValues: String?,
+    val rawData: String?,
+    val copyCount: Int,
+    val verified: Boolean
+)
+
 data class ShareTagItem(
     val relativePath: String,
     val fileName: String,
@@ -320,7 +344,10 @@ data class ShareTagItem(
     val colorName: String,
     val colorType: String,
     val colorValues: List<String>,
-    val rawBlocks: List<ByteArray?>
+    val rawBlocks: List<ByteArray?>,
+    val dbId: Long = -1L,
+    val copyCount: Int = 0,
+    val verified: Boolean = false
 )
 
 private data class WriteResumePoint(
@@ -365,6 +392,9 @@ class MainActivity : ComponentActivity() {
     private var forceOverwriteImport by mutableStateOf(false) // 控制导入标签包时是否覆盖同UID文件
     private var formatTagDebugEnabled by mutableStateOf(false) // 控制格式化标签调试弹窗
     private var inventoryEnabled by mutableStateOf(false) // 控制库存和数据页面显示
+    private var hideCopiedTags by mutableStateOf(true)   // 隐藏已复制标签
+    private var dualTagMode by mutableStateOf(false)      // 双标签模式：复制2次才隐藏
+    private var tagViewMode by mutableStateOf("list")     // 复制页视图：list/category
     private var tts: TextToSpeech? = null
     private var ttsReady by mutableStateOf(false)
     private var ttsLanguageReady by mutableStateOf(false)
@@ -503,6 +533,15 @@ class MainActivity : ComponentActivity() {
                     writeStatusMessage = result
                     if (result.contains("成功") || result.contains("success", ignoreCase = true)) {
                         playFeedbackTone(FeedbackTone.SUCCESS)
+                        // 写入成功：递增复制次数
+                        if (targetItem != null && targetItem.dbId > 0) {
+                            filamentDbHelper?.writableDatabase?.let { db ->
+                                filamentDbHelper!!.incrementShareTagCopyCount(db, targetItem.dbId)
+                            }
+                            shareTagItems = shareTagItems.map { si ->
+                                if (si.dbId == targetItem.dbId) si.copy(copyCount = si.copyCount + 1) else si
+                            }
+                        }
                         pendingWriteItem = null
                         pendingVerifyItem = targetItem
                         writeStatusMessage = uiString(R.string.copy_write_done_verify_again)
@@ -521,6 +560,15 @@ class MainActivity : ComponentActivity() {
                     writeStatusMessage = result
                     if (result.contains("成功") || result.contains("success", ignoreCase = true)) {
                         playFeedbackTone(FeedbackTone.SUCCESS)
+                        // 校验成功：标记已校验
+                        if (targetItem != null && targetItem.dbId > 0) {
+                            filamentDbHelper?.writableDatabase?.let { db ->
+                                filamentDbHelper!!.setShareTagVerified(db, targetItem.dbId, true)
+                            }
+                            shareTagItems = shareTagItems.map { si ->
+                                if (si.dbId == targetItem.dbId) si.copy(verified = true) else si
+                            }
+                        }
                         pendingVerifyItem = null
                     } else {
                         playFeedbackTone(FeedbackTone.FAILURE)
@@ -552,6 +600,16 @@ class MainActivity : ComponentActivity() {
                     miscStatusMessage = result
                     if (result.contains("成功") || result.contains("success", ignoreCase = true)) {
                         playFeedbackTone(FeedbackTone.SUCCESS)
+                        // 格式化成功：重置对应 share_tags 记录的复制次数和校验标记
+                        val trayUid = uiState.trayUidHex
+                        if (trayUid.isNotBlank()) {
+                            filamentDbHelper?.writableDatabase?.let { db ->
+                                filamentDbHelper!!.resetShareTagByTrayUid(db, trayUid)
+                            }
+                            shareTagItems = shareTagItems.map { si ->
+                                if (si.trayUid == trayUid) si.copy(copyCount = 0, verified = false) else si
+                            }
+                        }
                     } else {
                         playFeedbackTone(FeedbackTone.FAILURE)
                     }
@@ -612,6 +670,9 @@ class MainActivity : ComponentActivity() {
         val uiPrefs = getSharedPreferences(UI_PREFS_NAME, Context.MODE_PRIVATE)
         voiceEnabled = uiPrefs.getBoolean(KEY_VOICE_ENABLED, false)
         inventoryEnabled = uiPrefs.getBoolean(KEY_INVENTORY_ENABLED, false)
+        hideCopiedTags = uiPrefs.getBoolean(KEY_HIDE_COPIED_TAGS, true)
+        dualTagMode = uiPrefs.getBoolean(KEY_DUAL_TAG_MODE, false)
+        tagViewMode = uiPrefs.getString(KEY_TAG_VIEW_MODE, "list") ?: "list"
         uiStyle = runCatching {
             AppUiStyle.valueOf(uiPrefs.getString(KEY_UI_STYLE, AppUiStyle.NEUMORPHIC.name).orEmpty())
         }.getOrDefault(AppUiStyle.NEUMORPHIC)
@@ -697,6 +758,21 @@ class MainActivity : ComponentActivity() {
                         inventoryEnabled = enabled
                         uiPrefs.edit().putBoolean(KEY_INVENTORY_ENABLED, enabled).apply()
                     },
+                    hideCopiedTags = hideCopiedTags,
+                    onHideCopiedTagsChange = { enabled ->
+                        hideCopiedTags = enabled
+                        uiPrefs.edit().putBoolean(KEY_HIDE_COPIED_TAGS, enabled).apply()
+                    },
+                    dualTagMode = dualTagMode,
+                    onDualTagModeChange = { enabled ->
+                        dualTagMode = enabled
+                        uiPrefs.edit().putBoolean(KEY_DUAL_TAG_MODE, enabled).apply()
+                    },
+                    tagViewMode = tagViewMode,
+                    onTagViewModeChange = { mode ->
+                        tagViewMode = mode
+                        uiPrefs.edit().putString(KEY_TAG_VIEW_MODE, mode).apply()
+                    },
                     onNotesChange = { trayUid, originalMaterial, notes ->
                         updateTrayNotes(trayUid, originalMaterial, notes)
                     },
@@ -750,22 +826,12 @@ class MainActivity : ComponentActivity() {
                     shareTagItems = shareTagItems,
                     tagPreselectedFileName = tagPreselectedFileName,
                     shareLoading = shareLoading,
-                    shareRefreshStatusMessage = shareRefreshStatusMessage,
                     writeStatusMessage = writeStatusMessage,
                     writeToolStatusMessage = writeToolStatusMessage,
                     writeInProgress = pendingWriteItem != null || pendingVerifyItem != null,
                     formatInProgress = pendingClearFuid,
                     onTagScreenEnter = {
                         refreshShareTagItemsAsync()
-                    },
-                    onRefreshShareFiles = {
-                        if (refreshShareTagItemsAsync()) {
-                            ""
-                        } else {
-                            shareRefreshStatusMessage = uiString(R.string.copy_shared_refresh_busy)
-                            scheduleClearShareRefreshStatusMessage()
-                            ""
-                        }
                     },
                     onStartWriteTag = { item ->
                         enqueueWriteTask(item)
@@ -1180,63 +1246,85 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun importTagPackageFromZipUri(uri: Uri): String {
-        val externalDir = getExternalFilesDir(null) ?: return "无法访问应用存储目录"
-        val shareDir = File(externalDir, "rfid_files/share")
-        if (!shareDir.exists()) {
-            shareDir.mkdirs()
-        }
+        val dbHelper = filamentDbHelper ?: return "数据库不可用"
+        val db = dbHelper.writableDatabase
         return try {
             var extractedCount = 0
             var skippedCount = 0
+            var invalidCount = 0
             var overwrittenCount = 0
-            val existingTxtFiles = shareDir
-                .walkTopDown()
-                .filter { it.isFile && it.extension.equals("txt", ignoreCase = true) }
-                .toList()
-            val existingUidSet = existingTxtFiles
-                .map { it.nameWithoutExtension.uppercase(Locale.US) }
+
+            // 从 DB 加载已有的 file_uid 和 tray_uid，用于去重（纯 DB 操作）
+            val existingRows = dbHelper.getAllShareTagRows(db)
+            val existingFileUidSet = existingRows.map { it.fileUid.uppercase(Locale.US) }.toMutableSet()
+            val existingTrayUidSet = existingRows
+                .mapNotNull { it.trayUid?.uppercase(Locale.US)?.ifBlank { null } }
                 .toMutableSet()
-            val uidFilesByUid = mutableMapOf<String, MutableList<File>>()
-            existingTxtFiles.forEach { file ->
-                val uid = file.nameWithoutExtension.uppercase(Locale.US)
-                if (uid.isNotBlank()) {
-                    uidFilesByUid.getOrPut(uid) { mutableListOf() }.add(file)
-                }
-            }
+
             contentResolver.openInputStream(uri)?.use { input ->
                 ZipInputStream(input).use { zip ->
                     var entry = zip.nextEntry
                     while (entry != null) {
                         if (!entry.isDirectory && entry.name.lowercase(Locale.US).endsWith(".txt")) {
                             val incomingUid = File(entry.name).nameWithoutExtension.uppercase(Locale.US)
-                            val alreadyExists = incomingUid.isNotBlank() && existingUidSet.contains(incomingUid)
+                            val alreadyExists = incomingUid.isNotBlank() && existingFileUidSet.contains(incomingUid)
+
+                            // 读取字节（ZipInputStream 不支持重置，必须先读出）
+                            val bytes = zip.readBytes()
+
                             if (alreadyExists && !forceOverwriteImport) {
                                 skippedCount++
                                 zip.closeEntry()
                                 entry = zip.nextEntry
                                 continue
                             }
+
+                            // 校验格式：严格要求 64 行 × 32 字符
+                            val content = String(bytes, Charsets.UTF_8)
+                            val rawBlocks = parseHexTagFileStrict(content)
+                            if (rawBlocks == null) {
+                                invalidCount++
+                                zip.closeEntry()
+                                entry = zip.nextEntry
+                                continue
+                            }
+
+                            // 解析预览数据，获取 tray_uid 和颜色信息
+                            val preview = NfcTagProcessor.parseForPreview(rawBlocks, filamentDbHelper) { }
+                            val trayUid = preview.trayUidHex.trim()
+
+                            // 检查 tray_uid 是否已在 DB 中存在（物理标签去重）
+                            if (trayUid.isNotBlank() && existingTrayUidSet.contains(trayUid.uppercase())) {
+                                skippedCount++
+                                zip.closeEntry()
+                                entry = zip.nextEntry
+                                continue
+                            }
+
+                            // 强制覆盖：删除旧 DB 记录
                             if (alreadyExists && forceOverwriteImport && incomingUid.isNotBlank()) {
-                                // 强制覆盖：先删除 share 下任意子目录中同 UID 的旧文件，避免跨目录重复。
-                                uidFilesByUid[incomingUid].orEmpty().forEach { oldFile ->
-                                    if (oldFile.exists() && !oldFile.delete()) {
-                                        logDebug("删除旧标签文件失败: ${oldFile.absolutePath}")
-                                    }
-                                }
-                                uidFilesByUid[incomingUid] = mutableListOf()
+                                dbHelper.deleteShareTagByFileUid(db, incomingUid)
                             }
-                            unzipEntryToDir(zip, entry, shareDir)
+
+                            // 归一化 raw_data 写入 DB
+                            val normalized = content.trim().lines()
+                                .map { it.trim() }.filter { it.isNotBlank() }.take(64).joinToString("\n")
+                            dbHelper.insertShareTag(
+                                db,
+                                fileUid = incomingUid,
+                                trayUid = trayUid.ifBlank { null },
+                                materialType = preview.displayData.type.ifBlank { null },
+                                colorUid = preview.displayData.colorCode.ifBlank { null },
+                                colorName = preview.displayData.colorName.ifBlank { null },
+                                colorType = preview.displayData.colorType.ifBlank { null },
+                                colorValues = preview.displayData.colorValues.joinToString(",").ifBlank { null },
+                                rawData = normalized
+                            )
+
                             extractedCount++
-                            if (alreadyExists && forceOverwriteImport) {
-                                overwrittenCount++
-                            }
-                            if (incomingUid.isNotBlank()) {
-                                existingUidSet.add(incomingUid)
-                                uidFilesByUid.getOrPut(incomingUid) { mutableListOf() }
-                                    .add(File(shareDir, entry.name))
-                            }
-                        } else {
-                            unzipEntryToDir(zip, entry, shareDir)
+                            if (alreadyExists && forceOverwriteImport) overwrittenCount++
+                            if (incomingUid.isNotBlank()) existingFileUidSet.add(incomingUid)
+                            if (trayUid.isNotBlank()) existingTrayUidSet.add(trayUid.uppercase())
                         }
                         zip.closeEntry()
                         entry = zip.nextEntry
@@ -1244,16 +1332,15 @@ class MainActivity : ComponentActivity() {
                 }
             } ?: return "读取标签包失败"
 
-            if (extractedCount == 0 && skippedCount == 0) {
-                "导入完成，但压缩包内未发现 txt 标签数据"
-            } else if (extractedCount == 0 && skippedCount > 0) {
-                "导入完成：全部为重复UID文件，已跳过 $skippedCount 个"
-            } else {
-                if (forceOverwriteImport) {
-                    "标签包导入完成: 导入 $extractedCount 个（覆盖 $overwrittenCount 个），跳过重复UID $skippedCount 个"
-                } else {
-                    "标签包导入完成: 导入 $extractedCount 个，跳过重复UID $skippedCount 个"
-                }
+            when {
+                extractedCount == 0 && skippedCount == 0 && invalidCount == 0 ->
+                    "导入完成，但压缩包内未发现 txt 标签数据"
+                extractedCount == 0 ->
+                    "导入完成：格式无效 $invalidCount 个，重复跳过 $skippedCount 个"
+                forceOverwriteImport ->
+                    "标签包导入完成: 导入 $extractedCount 个（覆盖 $overwrittenCount 个），格式无效 $invalidCount 个，跳过重复 $skippedCount 个"
+                else ->
+                    "标签包导入完成: 导入 $extractedCount 个，格式无效 $invalidCount 个，跳过重复 $skippedCount 个"
             }
         } catch (e: Exception) {
             logDebug("导入标签包失败: ${e.message}")
@@ -1408,9 +1495,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun clearShareTagFiles(): String {
+        // 同时清空 DB 表和本地文件
+        filamentDbHelper?.writableDatabase?.let { db ->
+            filamentDbHelper!!.clearShareTagsTable(db)
+        }
+        shareTagItems = emptyList()
         val externalDir = getExternalFilesDir(null) ?: filesDir
         val shareDir = File(externalDir, "rfid_files/share")
-        if (!shareDir.exists()) return "标签库目录不存在"
+        if (!shareDir.exists()) return "标签库已清空"
         return try {
             var deleted = 0
             shareDir.walkTopDown()
@@ -1573,74 +1665,106 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadShareTagItems(): List<ShareTagItem> {
-        val externalDir = getExternalFilesDir(null) ?: return emptyList()
-        val shareDir = File(externalDir, "rfid_files/share")
-        if (!shareDir.exists()) {
-            shareDir.mkdirs()
-            return emptyList()
-        }
-
-        val files = shareDir
-            .walkTopDown()
-            .filter { file ->
-                file.isFile && file.extension.equals("txt", ignoreCase = true)
-            }
-            .sortedBy { file ->
-                file.relativeTo(shareDir).path.lowercase(Locale.US)
-            }
-            .toList()
-
-        val result = ArrayList<ShareTagItem>()
-        files.forEach { file ->
-            try {
-                val rawBlocks = parseHexDumpFile(file) ?: return@forEach
-                // 共享文件批量扫描时关闭详细日志，避免大文件量下频繁日志影响性能。
-                val preview = NfcTagProcessor.parseForPreview(rawBlocks, filamentDbHelper) { }
-                val relativePath = file.relativeTo(shareDir).path.replace('\\', '/')
-                result.add(
-                    ShareTagItem(
-                        relativePath = relativePath,
-                        fileName = file.name,
-                        sourceUid = file.nameWithoutExtension,
-                        trayUid = preview.trayUidHex,
-                        materialType = preview.displayData.type,
-                        colorUid = preview.displayData.colorCode,
-                        colorName = preview.displayData.colorName,
-                        colorType = preview.displayData.colorType,
-                        colorValues = preview.displayData.colorValues,
-                        rawBlocks = rawBlocks
-                    )
+        val dbHelper = filamentDbHelper ?: return emptyList()
+        val db = dbHelper.writableDatabase
+        val rows = dbHelper.getAllShareTagRows(db)
+        val result = ArrayList<ShareTagItem>(rows.size)
+        for (row in rows) {
+            val rawData = row.rawData ?: continue
+            val rawBlocks = parseHexTagFileStrict(rawData) ?: continue
+            val colorValuesList = row.colorValues?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+            result.add(
+                ShareTagItem(
+                    relativePath = row.fileUid.lowercase(Locale.US),
+                    fileName = "${row.fileUid}.txt",
+                    sourceUid = row.fileUid,
+                    trayUid = row.trayUid.orEmpty(),
+                    materialType = row.materialType.orEmpty(),
+                    colorUid = row.colorUid.orEmpty(),
+                    colorName = row.colorName.orEmpty(),
+                    colorType = row.colorType.orEmpty(),
+                    colorValues = colorValuesList,
+                    rawBlocks = rawBlocks,
+                    dbId = row.id,
+                    copyCount = row.copyCount,
+                    verified = row.verified
                 )
-            } catch (e: Exception) {
-                logDebug("解析共享文件失败 ${file.name}: ${e.message}")
-            }
+            )
         }
         return result
     }
 
+    /**
+     * 将磁盘上的 share 目录 txt 文件迁移到 DB（含 raw_data）。
+     * 仅在首次升级/安装后运行一次，之后由 DB meta key 标记跳过。
+     */
+    private fun migrateDiskFilesToDb() {
+        val dbHelper = filamentDbHelper ?: return
+        val db = dbHelper.writableDatabase
+        if (dbHelper.getMetaValue(db, "share_disk_migration_v1") != null) return
+
+        val externalDir = getExternalFilesDir(null)
+        val shareDir = externalDir?.let { File(it, "rfid_files/share") }
+        if (shareDir == null || !shareDir.exists()) {
+            dbHelper.setMetaValue(db, "share_disk_migration_v1", "done")
+            return
+        }
+
+        val existingDbUids = dbHelper.getAllShareTagRows(db)
+            .map { it.fileUid.uppercase(Locale.US) }
+            .toSet()
+
+        shareDir.walkTopDown()
+            .filter { it.isFile && it.extension.equals("txt", ignoreCase = true) }
+            .forEach { file ->
+                val fileUid = file.nameWithoutExtension.uppercase(Locale.US)
+                try {
+                    val content = file.readText(Charsets.UTF_8)
+                    val rawBlocks = parseHexTagFileStrict(content) ?: return@forEach
+                    val normalized = content.trim().lines()
+                        .map { it.trim() }.filter { it.isNotBlank() }.take(64).joinToString("\n")
+                    if (fileUid in existingDbUids) {
+                        // Update raw_data for existing DB rows that lack it
+                        dbHelper.updateShareTagRawData(db, fileUid, normalized)
+                    } else {
+                        val preview = NfcTagProcessor.parseForPreview(rawBlocks, filamentDbHelper) {}
+                        val trayUid = preview.trayUidHex.trim()
+                        dbHelper.insertShareTag(
+                            db,
+                            fileUid = fileUid,
+                            trayUid = trayUid.ifBlank { null },
+                            materialType = preview.displayData.type.ifBlank { null },
+                            colorUid = preview.displayData.colorCode.ifBlank { null },
+                            colorName = preview.displayData.colorName.ifBlank { null },
+                            colorType = preview.displayData.colorType.ifBlank { null },
+                            colorValues = preview.displayData.colorValues.joinToString(",").ifBlank { null },
+                            rawData = normalized
+                        )
+                    }
+                } catch (e: Exception) {
+                    logDebug("迁移标签文件失败 ${file.name}: ${e.message}")
+                }
+            }
+        dbHelper.setMetaValue(db, "share_disk_migration_v1", "done")
+    }
+
     private fun deleteShareTagItem(item: ShareTagItem): String {
         return try {
-            val externalDir = getExternalFilesDir(null) ?: return "删除失败：无法访问应用存储目录"
-            val shareDir = File(externalDir, "rfid_files/share")
-            val relativePath = item.relativePath.ifBlank { item.fileName }
-            val targetFile = File(shareDir, relativePath)
-            val sharePath = shareDir.canonicalPath
-            val targetPath = targetFile.canonicalPath
-            if (!targetPath.startsWith("$sharePath${File.separator}")) {
-                return "删除失败：非法文件路径"
+            filamentDbHelper?.writableDatabase?.let { db ->
+                filamentDbHelper!!.deleteShareTagByFileUid(db, item.sourceUid.uppercase(Locale.US))
             }
-            if (!targetFile.exists()) {
-                shareTagItems = shareTagItems.filterNot { it.relativePath == item.relativePath }
-                return "文件不存在，已从列表移除"
-            }
-            if (!targetFile.isFile) {
-                return "删除失败：目标不是文件"
-            }
-            if (!targetFile.delete()) {
-                return "删除失败：无法删除文件"
-            }
+            // 同时尝试删除磁盘文件（兼容旧版迁移数据）
+            try {
+                val externalDir = getExternalFilesDir(null)
+                val shareDir = externalDir?.let { File(it, "rfid_files/share") }
+                if (shareDir != null) {
+                    shareDir.walkTopDown()
+                        .filter { it.isFile && it.nameWithoutExtension.equals(item.sourceUid, ignoreCase = true) }
+                        .forEach { it.delete() }
+                }
+            } catch (_: Exception) { }
             shareTagItems = shareTagItems.filterNot { it.relativePath == item.relativePath }
-            "删除成功：${item.fileName.removeSuffix(".txt")}"
+            "删除成功：${item.sourceUid}"
         } catch (e: Exception) {
             logDebug("删除共享标签失败: ${e.message}")
             "删除失败: ${e.message.orEmpty()}"
@@ -1657,6 +1781,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 ensureBundledShareDataExtracted()
+                migrateDiskFilesToDb()
                 val loadedItems = loadShareTagItems()
                 withContext(Dispatchers.Main) {
                     shareTagItems = loadedItems
@@ -1702,6 +1827,21 @@ class MainActivity : ComponentActivity() {
         cursor.use {
             return it.moveToFirst()
         }
+    }
+
+    /** 严格校验：必须恰好 64 行，每行恰好 32 个十六进制字符（空格会被跳过计数外）。 */
+    private fun parseHexTagFileStrict(content: String): List<ByteArray?>? {
+        val lines = content.trim().lines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+        if (lines.size != 64) return null
+        val blocks = MutableList<ByteArray?>(64) { null }
+        for ((i, line) in lines.withIndex()) {
+            val hex = line.replace(" ", "").uppercase(Locale.US)
+            if (hex.length != 32 || !hex.all { c -> c in '0'..'9' || c in 'A'..'F' }) return null
+            blocks[i] = hexToBytes(hex)
+        }
+        return blocks
     }
 
     private fun parseHexDumpFile(file: File): List<ByteArray?>? {
@@ -3216,6 +3356,23 @@ class FilamentDbHelper(context: Context) :
         db.execSQL(
             "CREATE INDEX IF NOT EXISTS idx_filament_type_mapping_base_type ON $FILAMENT_TYPE_MAPPING_TABLE (base_type)"
         )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $SHARE_TAGS_TABLE (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_uid TEXT UNIQUE NOT NULL,
+                tray_uid TEXT,
+                material_type TEXT,
+                color_uid TEXT,
+                color_name TEXT,
+                color_type TEXT,
+                color_values TEXT,
+                raw_data TEXT,
+                copy_count INTEGER NOT NULL DEFAULT 0,
+                verified INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent()
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -3339,6 +3496,30 @@ class FilamentDbHelper(context: Context) :
             addTrayColumn(db, "original_material", "TEXT")
             addTrayColumn(db, "notes", "TEXT")
         }
+        if (oldVersion < 15) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS $SHARE_TAGS_TABLE (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    file_uid TEXT UNIQUE NOT NULL,
+                    tray_uid TEXT,
+                    material_type TEXT,
+                    color_uid TEXT,
+                    color_name TEXT,
+                    color_type TEXT,
+                    color_values TEXT,
+                    raw_data TEXT,
+                    copy_count INTEGER NOT NULL DEFAULT 0,
+                    verified INTEGER NOT NULL DEFAULT 0
+                )
+                """.trimIndent()
+            )
+        }
+        if (oldVersion < 16) {
+            try {
+                db.execSQL("ALTER TABLE $SHARE_TAGS_TABLE ADD COLUMN raw_data TEXT")
+            } catch (_: Exception) { }
+        }
     }
 
     private fun addTrayColumn(db: SQLiteDatabase, column: String, type: String) {
@@ -3347,6 +3528,127 @@ class FilamentDbHelper(context: Context) :
         } catch (_: Exception) {
             // Ignore duplicate column errors.
         }
+    }
+
+    // --- share_tags 相关方法 ---
+
+    fun insertShareTag(
+        db: SQLiteDatabase,
+        fileUid: String,
+        trayUid: String?,
+        materialType: String?,
+        colorUid: String?,
+        colorName: String?,
+        colorType: String?,
+        colorValues: String?,
+        rawData: String? = null
+    ): Long {
+        val values = ContentValues()
+        values.put("file_uid", fileUid)
+        if (!trayUid.isNullOrBlank()) values.put("tray_uid", trayUid)
+        if (!materialType.isNullOrBlank()) values.put("material_type", materialType)
+        if (!colorUid.isNullOrBlank()) values.put("color_uid", colorUid)
+        if (!colorName.isNullOrBlank()) values.put("color_name", colorName)
+        if (!colorType.isNullOrBlank()) values.put("color_type", colorType)
+        if (!colorValues.isNullOrBlank()) values.put("color_values", colorValues)
+        if (!rawData.isNullOrBlank()) values.put("raw_data", rawData)
+        return db.insertWithOnConflict(SHARE_TAGS_TABLE, null, values, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
+    fun getShareTagMetaMap(db: SQLiteDatabase): Map<String, ShareTagDbMeta> {
+        val result = mutableMapOf<String, ShareTagDbMeta>()
+        val cursor = db.query(
+            SHARE_TAGS_TABLE,
+            arrayOf("id", "file_uid", "copy_count", "verified"),
+            null, null, null, null, null
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                val id = it.getLong(0)
+                val fileUid = it.getString(1) ?: continue
+                val copyCount = it.getInt(2)
+                val verified = it.getInt(3) != 0
+                result[fileUid.uppercase()] = ShareTagDbMeta(id, copyCount, verified)
+            }
+        }
+        return result
+    }
+
+    fun getAllShareTagRows(db: SQLiteDatabase): List<ShareTagDbRow> {
+        val result = mutableListOf<ShareTagDbRow>()
+        val cursor = db.query(
+            SHARE_TAGS_TABLE,
+            arrayOf("id", "file_uid", "tray_uid", "material_type", "color_uid", "color_name", "color_type", "color_values", "raw_data", "copy_count", "verified"),
+            null, null, null, null,
+            "material_type ASC, color_uid ASC, file_uid ASC"
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                result.add(ShareTagDbRow(
+                    id = it.getLong(0),
+                    fileUid = it.getString(1) ?: "",
+                    trayUid = it.getString(2),
+                    materialType = it.getString(3),
+                    colorUid = it.getString(4),
+                    colorName = it.getString(5),
+                    colorType = it.getString(6),
+                    colorValues = it.getString(7),
+                    rawData = it.getString(8),
+                    copyCount = it.getInt(9),
+                    verified = it.getInt(10) != 0
+                ))
+            }
+        }
+        return result
+    }
+
+    fun updateShareTagRawData(db: SQLiteDatabase, fileUid: String, rawData: String) {
+        val values = ContentValues()
+        values.put("raw_data", rawData)
+        db.update(SHARE_TAGS_TABLE, values, "file_uid = ?", arrayOf(fileUid))
+    }
+
+    fun getExistingShareTrayUids(db: SQLiteDatabase): Set<String> {
+        val result = mutableSetOf<String>()
+        val cursor = db.query(
+            SHARE_TAGS_TABLE,
+            arrayOf("tray_uid"),
+            "tray_uid IS NOT NULL AND tray_uid != ''",
+            null, null, null, null
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                val uid = it.getString(0)
+                if (!uid.isNullOrBlank()) result.add(uid.uppercase())
+            }
+        }
+        return result
+    }
+
+    fun incrementShareTagCopyCount(db: SQLiteDatabase, id: Long) {
+        db.execSQL("UPDATE $SHARE_TAGS_TABLE SET copy_count = copy_count + 1 WHERE id = ?", arrayOf(id))
+    }
+
+    fun setShareTagVerified(db: SQLiteDatabase, id: Long, verified: Boolean) {
+        val values = ContentValues()
+        values.put("verified", if (verified) 1 else 0)
+        db.update(SHARE_TAGS_TABLE, values, "id = ?", arrayOf(id.toString()))
+    }
+
+    fun resetShareTagByTrayUid(db: SQLiteDatabase, trayUid: String) {
+        if (trayUid.isBlank()) return
+        val values = ContentValues()
+        values.put("copy_count", 0)
+        values.put("verified", 0)
+        db.update(SHARE_TAGS_TABLE, values, "tray_uid = ?", arrayOf(trayUid))
+    }
+
+    fun deleteShareTagByFileUid(db: SQLiteDatabase, fileUid: String) {
+        db.delete(SHARE_TAGS_TABLE, "file_uid = ?", arrayOf(fileUid))
+    }
+
+    fun clearShareTagsTable(db: SQLiteDatabase) {
+        db.delete(SHARE_TAGS_TABLE, null, null)
     }
 
     fun getMetaValue(db: SQLiteDatabase, key: String): String? {

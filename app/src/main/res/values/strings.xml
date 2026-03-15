@@ -92,7 +92,7 @@
     <string name="tag_summary_format">总数：%1$d    当前筛选：%2$d</string>
     <string name="tag_uid_color_id_format">UID：%1$s    颜色ID：%2$s</string>
     <string name="tag_loading_shared_data">正在加载共享数据...</string>
-    <string name="tag_write_notice_title">写入前请严格遵守：</string>
+    <string name="tag_write_notice_title">写入注意事项</string>
     <string name="tag_write_notice_1">1. 标签必须紧贴手机 NFC 区域，写入过程中不要移动。</string>
     <string name="tag_write_notice_2">2. 写入完成后按提示移开标签，再贴上进行识别验证。</string>
     <string name="tag_write_notice_3">3. 不要写入已有的标签，相同标签会被识别为一卷料。</string>
@@ -153,6 +153,13 @@
     <string name="misc_force_overwrite_import">强制覆盖导入标签</string>
     <string name="config_inventory_feature">库存与数据功能</string>
     <string name="config_inventory_feature_desc">显示库存和数据页面</string>
+    <string name="config_hide_copied_tags">隐藏已复制标签</string>
+    <string name="config_hide_copied_tags_desc">隐藏已成功复制的标签</string>
+    <string name="config_dual_tag_mode">双标签模式</string>
+    <string name="config_dual_tag_mode_desc">开启后复制2次才隐藏</string>
+    <string name="config_tag_view_mode">复制页视图</string>
+    <string name="config_tag_view_list">列表</string>
+    <string name="config_tag_view_category">分类</string>
     <string name="reader_original_material">原始耗材</string>
     <string name="reader_notes">备注</string>
     <string name="inventory_original_material_label">原始耗材</string>
