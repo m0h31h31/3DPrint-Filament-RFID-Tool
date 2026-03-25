@@ -105,12 +105,14 @@ private fun resolveStatusTone(message: String): StatusTone {
             "已打包",
             "已停止",
             "已导入",
+            "此卡可用",
             "success",
             "completed",
             "saved",
             "exported",
             "stopped",
-            "imported"
+            "imported",
+            "card is usable"
         ).any { it in text } -> StatusTone.SUCCESS
 
         listOf(
@@ -191,6 +193,9 @@ fun MiscScreen(
     forceOverwriteImport: Boolean = false,
     onForceOverwriteImportChange: (Boolean) -> Unit = {},
     formatInProgress: Boolean = false,
+    cuidTestInProgress: Boolean = false,
+    onEnqueueCuidTest: () -> String = { "" },
+    onCancelCuidTest: () -> String = { "" },
     inventoryEnabled: Boolean = false,
     onInventoryEnabledChange: (Boolean) -> Unit = {},
     hideCopiedTags: Boolean = true,
@@ -705,8 +710,8 @@ fun MiscScreen(
                                 )
                             }
                             AppSwitch(
-                                checked = !inventoryEnabled,
-                                onCheckedChange = { onInventoryEnabledChange(!it) }
+                                checked = inventoryEnabled,
+                                onCheckedChange = { onInventoryEnabledChange(it) }
                             )
                         }
 
@@ -883,21 +888,41 @@ fun MiscScreen(
 
 
 
-                NeuButton(
-                    text = if (formatInProgress) {
-                        stringResource(R.string.misc_cancel_format)
-                    } else {
-                        stringResource(R.string.misc_format_tag)
-                    },
-                    onClick = {
-                        message = if (formatInProgress) {
-                            onCancelClearFuid()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    NeuButton(
+                        text = if (formatInProgress) {
+                            stringResource(R.string.misc_cancel_format)
                         } else {
-                            onClearFuid()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                            stringResource(R.string.misc_format_tag)
+                        },
+                        onClick = {
+                            message = if (formatInProgress) {
+                                onCancelClearFuid()
+                            } else {
+                                onClearFuid()
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    NeuButton(
+                        text = if (cuidTestInProgress) {
+                            stringResource(R.string.misc_cuid_test_cancel)
+                        } else {
+                            stringResource(R.string.misc_cuid_test)
+                        },
+                        onClick = {
+                            message = if (cuidTestInProgress) {
+                                onCancelCuidTest()
+                            } else {
+                                onEnqueueCuidTest()
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
                 NeuPanel(modifier = Modifier.fillMaxWidth()) {
                     Row(

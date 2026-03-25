@@ -3,6 +3,7 @@ package com.m0h31h31.bamburfidreader.ui.navigation
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -102,6 +103,9 @@ fun AppNavigation(
     onCancelClearFuid: () -> String,
     onClearSelfTags: () -> String,
     onClearShareTags: () -> String = { "" },
+    onEnqueueCuidTest: () -> String = { "" },
+    onCancelCuidTest: () -> String = { "" },
+    cuidTestInProgress: Boolean = false,
     onResetDatabase: () -> String,
     selfTagCount: Int,
     miscStatusMessage: String,
@@ -160,6 +164,11 @@ fun AppNavigation(
             onCancelClearFuid()
         }
     }
+    LaunchedEffect(currentRoute, cuidTestInProgress) {
+        if (currentRoute != "misc" && cuidTestInProgress) {
+            onCancelCuidTest()
+        }
+    }
     
     // 支持外部触发跳转到 tag / reader
     if (navigateToTag && currentRoute != "tag") {
@@ -190,7 +199,7 @@ fun AppNavigation(
                 key(inventoryEnabled) {
                 Box(
                     modifier = Modifier
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .fillMaxWidth()
                         .navigationBarsPadding()
                 ) {
                     MiuixNavigationBar {
@@ -343,6 +352,9 @@ fun AppNavigation(
                                 onCancelClearFuid = onCancelClearFuid,
                                 onClearSelfTags = onClearSelfTags,
                                 onClearShareTags = onClearShareTags,
+                                onEnqueueCuidTest = onEnqueueCuidTest,
+                                onCancelCuidTest = onCancelCuidTest,
+                                cuidTestInProgress = cuidTestInProgress,
                                 onResetDatabase = onResetDatabase,
                                 selfTagCount = selfTagCount,
                                 miscStatusMessage = miscStatusMessage,

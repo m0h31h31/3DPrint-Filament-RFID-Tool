@@ -340,7 +340,7 @@ fun ReaderScreen(
                     state.remainingPercent,
                     state.totalWeightGrams
                 ) {
-                    mutableStateOf(if (hasWeight) derivedGrams.toString() else "")
+                    mutableStateOf(if (hasWeight && derivedGrams > 0) derivedGrams.toString() else "")
                 }
                 val gramsInt = gramsValue.roundToInt().coerceIn(0, totalWeight.coerceAtLeast(0))
                 val percentValue = if (hasWeight) {
@@ -482,7 +482,8 @@ fun ReaderScreen(
                                                     val next = digits.toIntOrNull()
                                                         ?.coerceIn(0, totalWeight) ?: 0
                                                     gramsValue = next.toFloat()
-                                                    gramsText = next.toString()
+                                                    // 0 显示为空，避免"01"/"02"前导零问题
+                                                    gramsText = if (digits.isEmpty() || next == 0) "" else next.toString()
 
                                                     // 添加防抖机制，500毫秒内无输入变化时自动存储
                                                     debounceJob.value?.cancel()

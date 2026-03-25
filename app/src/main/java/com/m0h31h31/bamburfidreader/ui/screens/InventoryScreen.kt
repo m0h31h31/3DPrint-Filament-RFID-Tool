@@ -242,12 +242,16 @@ fun InventoryScreen(
                         TextField(
                             value = editGrams?.toString() ?: "",
                             onValueChange = { text ->
-                                val value = text.filter { it.isDigit() }
-                                val intValue = value.toIntOrNull() ?: 0
-                                editGrams = intValue
+                                val digits = text.filter { it.isDigit() }
+                                val parsed = digits.toIntOrNull()
+                                editGrams = if (parsed != null && editTotalGrams > 0) {
+                                    parsed.coerceIn(0, editTotalGrams)
+                                } else {
+                                    parsed // null → 显示空白；editTotalGrams=0时不限制
+                                }
                                 val target = pendingEdit
                                 if (target != null && editTotalGrams > 0) {
-                                    editPercent = (intValue * 100f / editTotalGrams)
+                                    editPercent = ((editGrams ?: 0) * 100f / editTotalGrams)
                                 }
                             },
                             label = { Text(text = stringResource(R.string.inventory_remaining_grams_label)) },
@@ -494,17 +498,29 @@ fun InventoryScreen(
                                                     .padding(start = 8.dp),
                                                 verticalArrangement = Arrangement.spacedBy(2.dp)
                                             ) {
-                                                Text(
-                                                    text = item.materialDetailedType.ifBlank {
-                                                        item.materialType.ifBlank {
-                                                            stringResource(
-                                                                R.string.inventory_unknown_material
-                                                            )
-                                                        }
-                                                    },
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.SemiBold
-                                                )
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Text(
+                                                        text = item.materialDetailedType.ifBlank {
+                                                            item.materialType.ifBlank {
+                                                                stringResource(
+                                                                    R.string.inventory_unknown_material
+                                                                )
+                                                            }
+                                                        },
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                    if (item.originalMaterial.isNotBlank()) {
+                                                        Text(
+                                                            text = item.originalMaterial,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -528,23 +544,6 @@ fun InventoryScreen(
                                                             stringResource(
                                                                 R.string.inventory_color_code_unknown
                                                             )
-                                                        },
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                                ) {
-                                                    Text(
-                                                        text = if (item.remainingGrams != null) {
-                                                            stringResource(
-                                                                R.string.inventory_remaining_grams_value,
-                                                                item.remainingGrams.toString()
-                                                            )
-                                                        } else {
-                                                            stringResource(R.string.inventory_remaining_grams_unknown)
                                                         },
                                                         style = MaterialTheme.typography.bodySmall,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant

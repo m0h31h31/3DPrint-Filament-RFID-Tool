@@ -102,7 +102,7 @@
     <string name="tag_current_selection">当前选择：%1$s</string>
     <string name="tag_delete_confirm_title">确认删除</string>
     <string name="tag_delete_confirm_message">确定删除标签 %1$s 吗？</string>
-    <string name="tag_start_write">FUID写入</string>
+    <string name="tag_start_write">空卡写入</string>
     <string name="tag_cancel_write">取消写卡</string>
     <string name="tag_cancel_c_modify">取消修改</string>
     <string name="tag_cuid_change">CUID改写</string>
@@ -186,8 +186,8 @@
     <string name="misc_clear_share_tags_title">确认清空标签数据库</string>
     <string name="misc_clear_share_tags_message">将清空数据库中的全部标签记录，此操作不可恢复。确定继续吗？</string>
     <string name="misc_force_overwrite_import">强制覆盖导入标签</string>
-    <string name="config_inventory_feature">隐藏库存与数据功能</string>
-    <string name="config_inventory_feature_desc">隐藏库存和数据页面</string>
+    <string name="config_inventory_feature">库存与数据功能</string>
+    <string name="config_inventory_feature_desc">开启后显示库存和数据页面</string>
     <string name="config_hide_copied_tags">隐藏已复制标签</string>
     <string name="config_hide_copied_tags_desc">隐藏已成功复制的标签</string>
     <string name="config_dual_tag_mode">双标签模式</string>
@@ -215,6 +215,13 @@
     <string name="misc_cancel_format_task">已取消格式化任务</string>
     <string name="misc_format_ready">格式化标签准备就绪：请将目标标签紧贴 NFC 区域，保持静止直到完成。</string>
     <string name="misc_finish_current_write_verify">请先完成或取消当前写入/校验任务</string>
+    <string name="misc_cuid_test">CUID可用性检测</string>
+    <string name="misc_cuid_test_cancel">取消检测</string>
+    <string name="misc_cuid_test_ready">CUID检测准备就绪：请将目标标签紧贴 NFC 区域，保持静止直到完成。</string>
+    <string name="misc_cuid_not_available">权限被绕过此卡不可用</string>
+    <string name="misc_cuid_available">此卡可用</string>
+    <string name="misc_cuid_format_first">请先格式化卡</string>
+    <string name="misc_cuid_test_failed">检测失败：%1$s</string>
 
     <string name="copy_write_in_progress">正在写入，请保持标签稳定贴合，切勿移动...</string>
     <string name="copy_verify_in_progress">正在校验，请保持标签稳定贴合，切勿移动...</string>

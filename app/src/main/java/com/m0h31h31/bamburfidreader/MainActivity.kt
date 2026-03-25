@@ -425,6 +425,7 @@ class MainActivity : ComponentActivity() {
     private var pendingCModifyItem by mutableStateOf<ShareTagItem?>(null)
     private var cModifyRecoveryInfo by mutableStateOf<CModifyRecoveryInfo?>(null)
     private var pendingClearFuid by mutableStateOf(false)
+    private var pendingCuidTest by mutableStateOf(false)
     private var pendingNdefWriteRequest by mutableStateOf<NdefWriteRequest?>(null)
     private var shareLoading by mutableStateOf(false)
     private var shareRefreshStatusMessage by mutableStateOf("")
@@ -539,6 +540,8 @@ class MainActivity : ComponentActivity() {
                     writeToolStatusMessage = uiString(R.string.copy_ndef_in_progress)
                 } else if (pendingClearFuid) {
                     miscStatusMessage = "正在格式化"
+                } else if (pendingCuidTest) {
+                    miscStatusMessage = "正在检测..."
                 }
             }
             if (pendingWriteItem != null) {
@@ -651,6 +654,19 @@ class MainActivity : ComponentActivity() {
                         playFeedbackTone(FeedbackTone.FAILURE)
                     }
                     pendingClearFuid = false
+                }
+            } else if (pendingCuidTest) {
+                val result = testCuidCard(tag) { status ->
+                    runOnUiThread { miscStatusMessage = status }
+                }
+                runOnUiThread {
+                    miscStatusMessage = result
+                    if (result == uiString(R.string.misc_cuid_available)) {
+                        playFeedbackTone(FeedbackTone.SUCCESS)
+                    } else {
+                        playFeedbackTone(FeedbackTone.FAILURE)
+                    }
+                    pendingCuidTest = false
                 }
             } else {
                 val result = readTag(tag)
@@ -836,6 +852,14 @@ class MainActivity : ComponentActivity() {
                     },
                     onClearSelfTags = { clearSelfTagFiles() },
                     onClearShareTags = { clearShareTagFiles() },
+                    onEnqueueCuidTest = { enqueueCuidTestTask() },
+                    onCancelCuidTest = {
+                        pendingCuidTest = false
+                        val msg = "已取消CUID检测"
+                        miscStatusMessage = msg
+                        msg
+                    },
+                    cuidTestInProgress = pendingCuidTest,
                     onResetDatabase = { resetDatabase() },
                     selfTagCount = selfTagCount,
                     miscStatusMessage = miscStatusMessage,
@@ -920,7 +944,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun enqueueWriteTask(item: ShareTagItem) {
-        if (pendingClearFuid || pendingNdefWriteRequest != null) {
+        if (pendingClearFuid || pendingCuidTest || pendingNdefWriteRequest != null) {
             writeStatusMessage = uiString(R.string.copy_finish_current_task_first)
             return
         }
@@ -946,7 +970,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun enqueueCModifyTask(item: ShareTagItem) {
-        if (pendingWriteItem != null || pendingVerifyItem != null || pendingClearFuid || pendingNdefWriteRequest != null) {
+        if (pendingWriteItem != null || pendingVerifyItem != null || pendingClearFuid || pendingCuidTest || pendingNdefWriteRequest != null) {
             writeStatusMessage = uiString(R.string.copy_finish_current_task_first)
             return
         }
@@ -1465,7 +1489,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun enqueueNdefWriteTask(request: NdefWriteRequest): String {
-        if (pendingWriteItem != null || pendingVerifyItem != null || pendingClearFuid || pendingNdefWriteRequest != null) {
+        if (pendingWriteItem != null || pendingVerifyItem != null || pendingClearFuid || pendingCuidTest || pendingNdefWriteRequest != null) {
             return uiString(R.string.write_finish_current_task_first)
         }
 
@@ -1502,7 +1526,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun enqueueClearFuidTask(): String {
-        if (pendingWriteItem != null || pendingVerifyItem != null || pendingNdefWriteRequest != null) {
+        if (pendingWriteItem != null || pendingVerifyItem != null || pendingCuidTest || pendingNdefWriteRequest != null) {
             return uiString(R.string.misc_finish_current_write_verify)
         }
         resetDebugInfoDialog("格式化标签调试")
@@ -1510,6 +1534,115 @@ class MainActivity : ComponentActivity() {
         pendingClearFuid = true
         miscStatusMessage = uiString(R.string.misc_format_ready)
         return miscStatusMessage
+    }
+
+    private fun enqueueCuidTestTask(): String {
+        if (pendingWriteItem != null || pendingVerifyItem != null || pendingClearFuid || pendingNdefWriteRequest != null) {
+            return uiString(R.string.misc_finish_current_write_verify)
+        }
+        pendingCuidTest = true
+        miscStatusMessage = uiString(R.string.misc_cuid_test_ready)
+        return miscStatusMessage
+    }
+
+    private fun testCuidCard(
+        tag: Tag,
+        onStatusUpdate: ((String) -> Unit)? = null
+    ): String {
+        val mifare = MifareClassic.get(tag)
+            ?: return uiString(R.string.misc_cuid_test_failed, "标签不支持 MIFARE Classic")
+        val ffKey = ByteArray(6) { 0xFF.toByte() }
+        return try {
+            mifare.connect()
+            onStatusUpdate?.invoke("正在检测...")
+
+            // Step 1: Authenticate sector 0 with FF key
+            val authOk = authenticateSectorWithRetry(
+                mifare = mifare,
+                sectorIndex = 0,
+                keysA = listOf(ffKey),
+                keysB = listOf(ffKey)
+            )
+            if (!authOk) {
+                return uiString(R.string.misc_cuid_format_first)
+            }
+
+            // Step 2: Read block 0 (save original)
+            val originalBlock0 = readBlockWithRetry(mifare, 0)
+                ?: return uiString(R.string.misc_cuid_test_failed, "读取块0失败")
+
+            // Step 3: Read sector 0 trailer (block 3, save original)
+            val trailerBlock = mifare.sectorToBlock(0) + 3
+            val originalTrailer = readBlockWithRetry(mifare, trailerBlock)
+                ?: return uiString(R.string.misc_cuid_test_failed, "读取权限位失败")
+
+            // Step 4: Modify sector 0 access bits to 878787 — must use Key B to write trailer
+            val newTrailer = ByteArray(16).apply {
+                for (i in 0..5) this[i] = 0xFF.toByte()       // KeyA: FF*6
+                this[6] = 0x87.toByte()
+                this[7] = 0x87.toByte()
+                this[8] = 0x87.toByte()
+                this[9] = originalTrailer[9]                   // preserve user data byte
+                for (i in 10..15) this[i] = 0xFF.toByte()     // KeyB: FF*6
+            }
+            val authKeyBStep4 = authenticateSectorWithRetry(
+                mifare = mifare,
+                sectorIndex = 0,
+                keysA = emptyList(),
+                keysB = listOf(ffKey)
+            )
+            if (!authKeyBStep4 || !writeBlockWithRetry(mifare, trailerBlock, newTrailer)) {
+                return uiString(R.string.misc_cuid_test_failed, "无法修改权限位")
+            }
+
+            // Step 5: Re-authenticate after trailer change
+            val reAuthOk = authenticateSectorWithRetry(
+                mifare = mifare,
+                sectorIndex = 0,
+                keysA = listOf(ffKey),
+                keysB = listOf(ffKey)
+            )
+            if (!reAuthOk) {
+                return uiString(R.string.misc_cuid_test_failed, "修改权限后认证失败，请手动重置卡片")
+            }
+
+            // Step 6: Try to write block 0 with test data using KeyA FF
+            val testData = hexToBytes("11223344440804006263646566676869")
+            val writeOk = writeBlockWithRetry(mifare, 0, testData)
+
+            // Step 7: Restore block 0 if it was modified
+            if (writeOk) {
+                authenticateSectorWithRetry(
+                    mifare = mifare,
+                    sectorIndex = 0,
+                    keysA = listOf(ffKey),
+                    keysB = listOf(ffKey)
+                )
+                writeBlockWithRetry(mifare, 0, originalBlock0)
+            }
+
+            // Step 8: Restore sector 0 trailer to default FF078069 — must use Key B to write trailer
+            val defaultTrailer = ByteArray(16).apply {
+                for (i in 0..5) this[i] = 0xFF.toByte()    // KeyA: FF*6
+                val access = hexToBytes("FF078069")
+                System.arraycopy(access, 0, this, 6, 4)    // Access: FF 07 80 69
+                for (i in 10..15) this[i] = 0xFF.toByte()  // KeyB: FF*6
+            }
+            authenticateSectorWithRetry(
+                mifare = mifare,
+                sectorIndex = 0,
+                keysA = emptyList(),
+                keysB = listOf(ffKey)
+            )
+            writeBlockWithRetry(mifare, trailerBlock, defaultTrailer)
+
+            if (writeOk) uiString(R.string.misc_cuid_not_available)
+            else uiString(R.string.misc_cuid_available)
+        } catch (e: Exception) {
+            uiString(R.string.misc_cuid_test_failed, e.message.orEmpty())
+        } finally {
+            try { mifare.close() } catch (_: Exception) {}
+        }
     }
 
     private fun resolveSelfRfidDirectory(): File? {
@@ -2432,6 +2565,30 @@ class MainActivity : ComponentActivity() {
                         )
                         if (authByFf) {
                             logStep("扇区 $sector 派生秘钥认证失败，FF认证成功，判定已重置")
+                            // 检查权限位是否为 FF078069，不是则修正
+                            val trailerBlock = mifare.sectorToBlock(sector) + 3
+                            val trailerData = readBlockWithRetry(mifare, trailerBlock)
+                            if (trailerData != null) {
+                                val currentAccess = trailerData.copyOfRange(6, 10)
+                                val defaultAccess = hexToBytes("FF078069")
+                                if (!currentAccess.contentEquals(defaultAccess)) {
+                                    logStep("扇区$sector: 权限位非标准，使用KeyB重新认证并修正为 FF078069")
+                                    val fixedTrailer = buildTrailer(ffKey, defaultAccess, ffKey)
+                                    val reAuthKeyB = authenticateSectorWithRetry(
+                                        mifare = mifare,
+                                        sectorIndex = sector,
+                                        keysA = emptyList(),
+                                        keysB = listOf(ffKey)
+                                    )
+                                    if (reAuthKeyB && writeBlockWithRetry(mifare, trailerBlock, fixedTrailer)) {
+                                        logStep("扇区$sector: 权限位已修正为 FF078069")
+                                    } else {
+                                        logStep("扇区$sector: 权限位修正失败，继续")
+                                    }
+                                } else {
+                                    logStep("扇区$sector: 权限位已是 FF078069，无需修正")
+                                }
+                            }
                             continue
                         }
                         return fail("格式化失败：扇区 $sector 使用派生秘钥/FF秘钥认证失败")
