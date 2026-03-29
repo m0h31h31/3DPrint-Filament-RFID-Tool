@@ -25,7 +25,7 @@ An Android app that reads and clones **Bambu Lab RFID filament tags** directly w
 
 - 📌 **Read Bambu RFID tag data** — filament type, color, weight, remaining amount and more
 - 📦 **Filament inventory management** — stock in / stock out / statistics
-- ⏺ **Clone & write tag data** — copy tags to blank MIFARE Classic or CUID cards
+- ⏺ **Clone & write tag data** — copy tags to FUID cards
 - 🧰 **Utilities** — full tag data export, key export, database backup/import, tag package import/export, tag formatting
 
 ------
@@ -36,7 +36,7 @@ I published a **Logo model** on MakerWorld — feel free to boost it and print o
 (Scale it down to save filament and print time)
 
 🔗 **Model link:**
-https://makerworld.com/en/models/2020787
+https://makerworld.com/en/models/2252770
 
 ------
 
