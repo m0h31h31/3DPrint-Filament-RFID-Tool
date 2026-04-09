@@ -9,7 +9,9 @@
       "Bash(cmd /c \"gradlew.bat assembleDebug 2>&1\")",
       "Bash(find E:AndroidStudioProjectsBambuRfidReader -name *AppSwitch* -o -name *Switch*)",
       "Bash(find . -path *ui/components* -name *.kt)",
-      "Bash(grep -v \"//.*onCreate\\\\|//.*onUpgrade\")"
+      "Bash(grep -v \"//.*onCreate\\\\|//.*onUpgrade\")",
+      "Bash(xargs wc:*)",
+      "Bash(xargs grep:*)"
     ]
   }
 }

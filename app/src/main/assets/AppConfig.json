@@ -8,6 +8,10 @@
         "type": "url",
         "value": "https://brr.jacki.cn/events"
     },
+    "tagShareEndpoint": {
+        "type": "url",
+        "value": "https://brr.jacki.cn/api/tags"
+    },
     "logoLinks": {
         "makerworld": {
             "type": "scheme",

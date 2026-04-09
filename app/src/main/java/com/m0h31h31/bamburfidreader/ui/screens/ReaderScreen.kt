@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import android.widget.Toast
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -59,8 +61,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
+import com.m0h31h31.bamburfidreader.CrealityMaterial
+import com.m0h31h31.bamburfidreader.CrealityTagData
 import com.m0h31h31.bamburfidreader.NfcUiState
 import com.m0h31h31.bamburfidreader.R
+import com.m0h31h31.bamburfidreader.ReaderBrand
+import com.m0h31h31.bamburfidreader.SnapmakerTagData
 import com.m0h31h31.bamburfidreader.LogCollector
 import com.m0h31h31.bamburfidreader.logDebug
 import com.m0h31h31.bamburfidreader.openTtsSettings
@@ -157,6 +163,12 @@ fun ReaderScreen(
     onAttemptRecovery: () -> Unit,
     onRemainingChange: (String, Float, Int?) -> Unit,
     onNotesChange: (String, String, String) -> Unit = { _, _, _ -> },
+    readerBrand: ReaderBrand = ReaderBrand.BAMBU,
+    onBrandChange: (ReaderBrand) -> Unit = {},
+    readerCrealityTagData: CrealityTagData? = null,
+    readerCrealityMaterial: CrealityMaterial? = null,
+    readerSnapmakerTagData: SnapmakerTagData? = null,
+    readerBrandStatus: String = "",
     modifier: Modifier = Modifier
 ) {
     val uiStyle = LocalAppUiStyle.current
@@ -241,7 +253,9 @@ fun ReaderScreen(
                     .padding(bottom = 0.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (state.status.isNotBlank()) {
+                // 状态文本：Bambu 用 state.status，其他品牌用 readerBrandStatus（始终显示）
+                val displayStatus = if (readerBrand == ReaderBrand.BAMBU) state.status else readerBrandStatus
+                if (readerBrand != ReaderBrand.BAMBU || displayStatus.isNotBlank()) {
                     NeuPanel(modifier = Modifier.fillMaxWidth()) {
                         Row(
                             modifier = Modifier
@@ -249,68 +263,45 @@ fun ReaderScreen(
                                 .padding(horizontal = 12.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            val statusIsWaiting = state.status.contains("正在") ||
-                                state.status.contains("请稍候") ||
-                                state.status.contains("准备就绪") ||
-                                state.status.contains("请将目标")
+                            val statusIsWaiting = displayStatus.contains("正在") ||
+                                displayStatus.contains("请稍候") ||
+                                displayStatus.contains("准备就绪") ||
+                                displayStatus.contains("请将目标")
                             if (statusIsWaiting) {
                                 AppCircularProgressIndicator(modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                             }
                             Text(
-                                text = state.status,
+                                text = displayStatus,
                                 style = MaterialTheme.typography.bodyLarge,
                                 modifier = Modifier.weight(1f)
                             )
                             val voiceHint = when {
-                                voiceEnabled && !ttsReady -> stringResource(
-                                    R.string.voice_status_engine_not_ready
-                                )
-
-                                voiceEnabled && !ttsLanguageReady -> stringResource(
-                                    R.string.voice_status_language_unavailable
-                                )
-
+                                voiceEnabled && !ttsReady -> stringResource(R.string.voice_status_engine_not_ready)
+                                voiceEnabled && !ttsLanguageReady -> stringResource(R.string.voice_status_language_unavailable)
                                 voiceEnabled -> stringResource(R.string.voice_status_on)
                                 else -> stringResource(R.string.voice_status_off)
                             }
-                            val canOpenTtsSettings =
-                                voiceEnabled && (!ttsReady || !ttsLanguageReady)
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            val canOpenTtsSettings = voiceEnabled && (!ttsReady || !ttsLanguageReady)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 AppSwitch(
                                     checked = voiceEnabled,
                                     onCheckedChange = onVoiceEnabledChange,
                                     modifier = Modifier.scale(0.8f),
                                 )
                                 Text(
-                                    text = if (canOpenTtsSettings) {
-                                        stringResource(R.string.action_voice_settings)
-                                    } else {
-                                        stringResource(R.string.voice_status_prefix, voiceHint)
-                                    },
+                                    text = if (canOpenTtsSettings) stringResource(R.string.action_voice_settings)
+                                           else stringResource(R.string.voice_status_prefix, voiceHint),
                                     style = MaterialTheme.typography.labelSmall.copy(
-                                        color = if (canOpenTtsSettings) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                        textDecoration = if (canOpenTtsSettings) {
-                                            TextDecoration.Underline
-                                        } else {
-                                            null
-                                        }
+                                        color = if (canOpenTtsSettings) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textDecoration = if (canOpenTtsSettings) TextDecoration.Underline else null
                                     ),
                                     modifier = if (canOpenTtsSettings) {
-                                        Modifier
-                                            .padding(start = 6.dp)
-                                            .clickable {
-                                                val opened = openTtsSettings(context)
-                                                if (!opened) {
-                                                    logDebug("无法打开语音设置")
-                                                }
-                                            }
+                                        Modifier.padding(start = 6.dp).clickable {
+                                            val opened = openTtsSettings(context)
+                                            if (!opened) logDebug("无法打开语音设置")
+                                        }
                                     } else {
                                         Modifier.padding(start = 6.dp)
                                     }
@@ -320,6 +311,7 @@ fun ReaderScreen(
                     }
                 }
 
+                // ── 主卡片面板（全品牌显示）──────────────────────────────────────────
                 val trayUidAvailable = state.trayUidHex.isNotBlank()
                 val totalWeight = state.totalWeightGrams
                 val hasWeight = totalWeight > 0
@@ -365,239 +357,219 @@ fun ReaderScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // ── 左侧色块 ──────────────────────────────────────────────
                             Box(modifier = Modifier.size(120.dp)) {
-                                ColorSwatch(
-                                    colorValues = state.displayColors,
-                                    colorType = state.displayColorType,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clickable {
-                                            val now = System.currentTimeMillis()
-                                            if (now - logoLastTapAt > 1500) {
-                                                logoTapCount = 0
-                                            }
-                                            logoLastTapAt = now
-                                            logoTapCount += 1
-                                            if (logoTapCount >= 5) {
-                                                logoTapCount = 0
-                                                val result = LogCollector.packageLogs(context)
-                                                logDebug(result)
-                                                Toast
-                                                    .makeText(context, result, Toast.LENGTH_SHORT)
-                                                    .show()
+                                when (readerBrand) {
+                                    ReaderBrand.BAMBU -> {
+                                        ColorSwatch(
+                                            colorValues = state.displayColors,
+                                            colorType = state.displayColorType,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clickable {
+                                                    val now = System.currentTimeMillis()
+                                                    if (now - logoLastTapAt > 1500) logoTapCount = 0
+                                                    logoLastTapAt = now
+                                                    logoTapCount += 1
+                                                    if (logoTapCount >= 5) {
+                                                        logoTapCount = 0
+                                                        val result = LogCollector.packageLogs(context)
+                                                        logDebug(result)
+                                                        Toast.makeText(context, result, Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                        )
+                                        if (trayUidAvailable) {
+                                            val outboundContainerColor = if (uiStyle == AppUiStyle.MIUIX) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.errorContainer
+                                            val outboundContentColor  = if (uiStyle == AppUiStyle.MIUIX) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onErrorContainer
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .padding(6.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(outboundContainerColor)
+                                                    .border(1.dp, outboundContentColor.copy(alpha = 0.18f), RoundedCornerShape(12.dp))
+                                                    .clickable { showOutboundConfirm = true },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = stringResource(R.string.reader_outbound),
+                                                    color = outboundContentColor,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                )
                                             }
                                         }
-                                )
-                                if (trayUidAvailable) {
-                                    val outboundContainerColor = if (uiStyle == AppUiStyle.MIUIX) {
-                                        MaterialTheme.colorScheme.error
-                                    } else {
-                                        MaterialTheme.colorScheme.errorContainer
                                     }
-                                    val outboundContentColor = if (uiStyle == AppUiStyle.MIUIX) {
-                                        MaterialTheme.colorScheme.onError
-                                    } else {
-                                        MaterialTheme.colorScheme.onErrorContainer
+                                    ReaderBrand.CREALITY -> {
+                                        val hex = readerCrealityTagData?.colorHex ?: ""
+                                        ColorSwatch(
+                                            colorValues = if (hex.isNotBlank()) listOf(hex) else emptyList(),
+                                            colorType = "",
+                                            modifier = Modifier.fillMaxSize()
+                                        )
                                     }
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(6.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(outboundContainerColor)
-                                            .border(
-                                                width = 1.dp,
-                                                color = outboundContentColor.copy(alpha = 0.18f),
-                                                shape = RoundedCornerShape(12.dp)
-                                            )
-                                            .clickable { showOutboundConfirm = true },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = stringResource(R.string.reader_outbound),
-                                            color = outboundContentColor,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    ReaderBrand.SNAPMAKER -> {
+                                        val hex = readerSnapmakerTagData?.let { "%06X".format(it.rgb1) } ?: ""
+                                        ColorSwatch(
+                                            colorValues = if (hex.isNotBlank()) listOf(hex) else emptyList(),
+                                            colorType = "",
+                                            modifier = Modifier.fillMaxSize()
                                         )
                                     }
                                 }
                             }
+
+                            // ── 右侧文字信息 ──────────────────────────────────────────
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
                                     .padding(start = 12.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text(
-                                    text = state.displayType.ifBlank {
-                                        stringResource(R.string.label_unknown)
-                                    },
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    modifier = modifier.padding(3.dp),
-                                    fontSize = 18.sp,
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = state.displayColorName.ifBlank {
-                                            stringResource(R.string.label_unknown)
-                                        },
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = FontWeight.SemiBold,
-                                        modifier = modifier.padding(3.dp)
-                                    )
-                                    Text(
-                                        text = "-",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = FontWeight.SemiBold,
-                                        modifier = modifier.padding(3.dp)
-                                    )
-                                    Text(
-                                        text = state.displayColorCode.ifBlank {
-                                            stringResource(R.string.label_unknown)
-                                        },
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = FontWeight.SemiBold,
+                                when (readerBrand) {
+                                    ReaderBrand.BAMBU -> {
+                                        Text(
+                                            text = state.displayType.ifBlank { stringResource(R.string.label_unknown) },
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            modifier = modifier.padding(3.dp),
+                                            fontSize = 18.sp,
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = state.displayColorName.ifBlank { stringResource(R.string.label_unknown) },
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontWeight = FontWeight.SemiBold,
                                                 modifier = modifier.padding(3.dp)
-                                    )
-                                }
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        QuantityButtonGroup(
-                                            value = gramsText,
-                                            enabled = trayUidAvailable && hasWeight,
-                                            onValueChange = { text ->
-                                                val digits = text.filter { it.isDigit() }
-                                                if (trayUidAvailable && hasWeight) {
-                                                    val next = digits.toIntOrNull()
-                                                        ?.coerceIn(0, totalWeight) ?: 0
-                                                    gramsValue = next.toFloat()
-                                                    // 0 显示为空，避免"01"/"02"前导零问题
-                                                    gramsText = if (digits.isEmpty() || next == 0) "" else next.toString()
-
-                                                    // 添加防抖机制，500毫秒内无输入变化时自动存储
-                                                    debounceJob.value?.cancel()
-                                                    debounceJob.value = scope.launch {
-                                                        delay(500)
-                                                        val finalGrams = gramsText.toIntOrNull()
-                                                            ?.coerceIn(0, totalWeight) ?: 0
-                                                        val finalPercent = if (totalWeight > 0) {
-                                                            ((finalGrams * 100f / totalWeight) * 10).roundToInt() / 10f
+                                            )
+                                            Text(text = "-", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold, modifier = modifier.padding(3.dp))
+                                            Text(
+                                                text = state.displayColorCode.ifBlank { stringResource(R.string.label_unknown) },
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = modifier.padding(3.dp)
+                                            )
+                                        }
+                                        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                QuantityButtonGroup(
+                                                    value = gramsText,
+                                                    enabled = trayUidAvailable && hasWeight,
+                                                    onValueChange = { text ->
+                                                        val digits = text.filter { it.isDigit() }
+                                                        if (trayUidAvailable && hasWeight) {
+                                                            val next = digits.toIntOrNull()?.coerceIn(0, totalWeight) ?: 0
+                                                            gramsValue = next.toFloat()
+                                                            gramsText = if (digits.isEmpty() || next == 0) "" else next.toString()
+                                                            debounceJob.value?.cancel()
+                                                            debounceJob.value = scope.launch {
+                                                                delay(500)
+                                                                val finalGrams = gramsText.toIntOrNull()?.coerceIn(0, totalWeight) ?: 0
+                                                                val finalPercent = if (totalWeight > 0) ((finalGrams * 100f / totalWeight) * 10).roundToInt() / 10f else 0f
+                                                                onRemainingChange(state.trayUidHex, finalPercent, finalGrams)
+                                                            }
                                                         } else {
-                                                            0f
+                                                            gramsText = digits
                                                         }
-                                                        onRemainingChange(state.trayUidHex, finalPercent, finalGrams)
-                                                    }
-                                                } else {
-                                                    gramsText = digits
-                                                }
-                                            },
-                                            onDecrease = {
-                                                val next = (gramsInt - 1).coerceAtLeast(0)
-                                                gramsValue = next.toFloat()
-                                                gramsText = next.toString()
-                                                onRemainingChange(
-                                                    state.trayUidHex,
-                                                    (next * 100f / totalWeight),
-                                                    next
+                                                    },
+                                                    onDecrease = {
+                                                        val next = (gramsInt - 1).coerceAtLeast(0)
+                                                        gramsValue = next.toFloat(); gramsText = next.toString()
+                                                        onRemainingChange(state.trayUidHex, (next * 100f / totalWeight), next)
+                                                    },
+                                                    onIncrease = {
+                                                        val next = (gramsInt + 1).coerceAtMost(totalWeight)
+                                                        gramsValue = next.toFloat(); gramsText = next.toString()
+                                                        onRemainingChange(state.trayUidHex, (next * 100f / totalWeight), next)
+                                                    },
+                                                    modifier = Modifier.fillMaxWidth()
                                                 )
-                                            },
-                                            onIncrease = {
-                                                val next = (gramsInt + 1).coerceAtMost(totalWeight)
-                                                gramsValue = next.toFloat()
-                                                gramsText = next.toString()
-                                                onRemainingChange(
-                                                    state.trayUidHex,
-                                                    (next * 100f / totalWeight),
-                                                    next
-                                                )
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
+                                            }
+                                        }
+                                    }
+                                    ReaderBrand.CREALITY -> {
+                                        val mat = readerCrealityMaterial
+                                        Text(
+                                            text = mat?.brand?.ifBlank { "-" } ?: "-",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            modifier = modifier.padding(3.dp),
+                                            fontSize = 18.sp,
+                                        )
+                                        Text(
+                                            text = mat?.materialType?.ifBlank { "-" } ?: "-",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = modifier.padding(3.dp)
+                                        )
+                                        Text(
+                                            text = mat?.name?.ifBlank { "-" } ?: "-",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = modifier.padding(3.dp)
+                                        )
+                                    }
+                                    ReaderBrand.SNAPMAKER -> {
+                                        val d = readerSnapmakerTagData
+                                        Text(
+                                            text = d?.vendor?.ifBlank { "-" } ?: "-",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            modifier = modifier.padding(3.dp),
+                                            fontSize = 18.sp,
+                                        )
+                                        Text(
+                                            text = if (d != null) "${d.mainType} ${d.subType}".trim().ifBlank { "-" } else "-",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = modifier.padding(3.dp)
                                         )
                                     }
                                 }
                             }
                         }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(vertical = 3.dp)
+                        // ── 余量滑块：仅拓竹品牌显示 ─────────────────────────────────
+                        if (readerBrand == ReaderBrand.BAMBU) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                AppSlider(
-                                    value = gramsValue,
-                                    onValueChange = { value ->
-                                        if (trayUidAvailable && hasWeight) {
-                                            val next = value.roundToInt().coerceIn(0, totalWeight)
-                                            gramsValue = next.toFloat()
-                                            gramsText = next.toString()
-                                        }
-                                    },
-                                    valueRange = 0f..(if (hasWeight) totalWeight.toFloat() else 1f),
-                                    enabled = trayUidAvailable && hasWeight,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(30.dp),
-                                    onValueChangeFinished = {
-                                        if (trayUidAvailable && hasWeight) {
-                                            // 使用最终的gramsValue计算准确的百分比和克重
-                                            val finalGrams = gramsValue.roundToInt().coerceIn(0, totalWeight)
-                                            val finalPercent = if (totalWeight > 0) {
-                                                ((finalGrams * 100f / totalWeight) * 10).roundToInt() / 10f
-                                            } else {
-                                                0f
+                                Box(modifier = Modifier.weight(1f).padding(vertical = 3.dp)) {
+                                    AppSlider(
+                                        value = gramsValue,
+                                        onValueChange = { value ->
+                                            if (trayUidAvailable && hasWeight) {
+                                                val next = value.roundToInt().coerceIn(0, totalWeight)
+                                                gramsValue = next.toFloat()
+                                                gramsText = next.toString()
                                             }
-                                            onRemainingChange(state.trayUidHex, finalPercent, finalGrams)
+                                        },
+                                        valueRange = 0f..(if (hasWeight) totalWeight.toFloat() else 1f),
+                                        enabled = trayUidAvailable && hasWeight,
+                                        modifier = Modifier.fillMaxWidth().height(30.dp),
+                                        onValueChangeFinished = {
+                                            if (trayUidAvailable && hasWeight) {
+                                                val finalGrams = gramsValue.roundToInt().coerceIn(0, totalWeight)
+                                                val finalPercent = if (totalWeight > 0) ((finalGrams * 100f / totalWeight) * 10).roundToInt() / 10f else 0f
+                                                onRemainingChange(state.trayUidHex, finalPercent, finalGrams)
+                                            }
                                         }
-                                    }
+                                    )
+                                }
+                                Text(
+                                    text = String.format("%.1f%%", percentValue),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(start = 8.dp).width(56.dp),
+                                    textAlign = TextAlign.End
                                 )
                             }
-
-                            Text(
-                                text = String.format("%.1f%%", percentValue),
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier
-                                    .padding(start = 8.dp)
-                                    .width(56.dp),
-                                textAlign = TextAlign.End
-                            )
                         }
-//                        if (!trayUidAvailable) {
-//                            Text(
-//                                text = stringResource(R.string.message_tray_uid_missing),
-//                                style = MaterialTheme.typography.bodySmall,
-//                                color = MaterialTheme.colorScheme.onSurfaceVariant
-//                            )
-//                        } else if (!hasWeight) {
-//                            Text(
-//                                text = stringResource(R.string.message_weight_missing),
-//                                style = MaterialTheme.typography.bodySmall,
-//                                color = MaterialTheme.colorScheme.onSurfaceVariant
-//                            )
-//                        } else {
-//                            Text(
-//                                text = stringResource(
-//                                    R.string.format_total_weight,
-//                                    totalWeight
-//                                ),
-//                                style = MaterialTheme.typography.bodySmall,
-//                                color = MaterialTheme.colorScheme.onSurfaceVariant
-//                            )
-//                        }
                     }
                 }
                 if (showRecoveryAction) {
@@ -658,87 +630,238 @@ fun ReaderScreen(
 //                    }
 //                }
 
-//                if (state.secondaryFields.isNotEmpty()) {
-                if (true) {
-                    NeuPanel(modifier = Modifier.fillMaxWidth()) {
-                        Row(
+                // ── 品牌切换按钮行 ─────────────────────────────────────────────────────
+                NeuPanel(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val brands = listOf(
+                            ReaderBrand.BAMBU    to "拓竹",
+                            ReaderBrand.CREALITY to "创想",
+                            ReaderBrand.SNAPMAKER to "快造"
+                        )
+                        brands.forEach { (brand, label) ->
+                            val selected = readerBrand == brand
+                            val bgColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+                                          else MaterialTheme.colorScheme.surfaceVariant
+                            val textColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                            else MaterialTheme.colorScheme.onSurfaceVariant
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(bgColor)
+                                    .clickable { onBrandChange(brand) }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = textColor,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ── 信息面板：填满剩余高度，支持滚动 ──────────────────────────────────
+                NeuPanel(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    val infoScrollState = rememberScrollState()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(infoScrollState)
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Top
                         ) {
                             Column(
                                 modifier = Modifier.weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text(
-                                    text = stringResource(R.string.label_other_info),
-                                    style = MaterialTheme.typography.titleSmall
-                                )
-                                InfoLine(
-                                    label = stringResource(R.string.reader_card_uid),
-                                    value = state.uidHex.ifBlank { "-" },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    inline = true
-                                )
-                                state.secondaryFields.forEach { field ->
-                                    InfoLine(
-                                        label = field.label,
-                                        value = field.value,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        inline = true
-                                    )
-                                }
-                                if (trayUidAvailable) {
-                                    CompactField(
-                                        value = editOriginalMaterial,
-                                        onValueChange = { newVal ->
-                                            editOriginalMaterial = newVal
-                                            notesDebounceJob.value?.cancel()
-                                            notesDebounceJob.value = scope.launch {
-                                                delay(500)
-                                                onNotesChange(state.trayUidHex, editOriginalMaterial, editNotes)
+                                when (readerBrand) {
+                                    ReaderBrand.BAMBU -> {
+                                        Text(
+                                            text = stringResource(R.string.label_other_info),
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                        InfoLine(
+                                            label = stringResource(R.string.reader_card_uid),
+                                            value = state.uidHex.ifBlank { "-" },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            inline = true
+                                        )
+                                        state.secondaryFields.forEach { field ->
+                                            InfoLine(
+                                                label = field.label,
+                                                value = field.value,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                inline = true
+                                            )
+                                        }
+                                        if (trayUidAvailable) {
+                                            CompactField(
+                                                value = editOriginalMaterial,
+                                                onValueChange = { newVal ->
+                                                    editOriginalMaterial = newVal
+                                                    notesDebounceJob.value?.cancel()
+                                                    notesDebounceJob.value = scope.launch {
+                                                        delay(500)
+                                                        onNotesChange(state.trayUidHex, editOriginalMaterial, editNotes)
+                                                    }
+                                                },
+                                                label = stringResource(R.string.reader_original_material),
+                                                modifier = Modifier.fillMaxWidth(0.7f)
+                                            )
+                                            CompactField(
+                                                value = editNotes,
+                                                onValueChange = { newVal ->
+                                                    editNotes = newVal
+                                                    notesDebounceJob.value?.cancel()
+                                                    notesDebounceJob.value = scope.launch {
+                                                        delay(500)
+                                                        onNotesChange(state.trayUidHex, editOriginalMaterial, editNotes)
+                                                    }
+                                                },
+                                                label = stringResource(R.string.reader_notes),
+                                                modifier = Modifier.fillMaxWidth(0.7f)
+                                            )
+                                        }
+                                    }
+                                    ReaderBrand.CREALITY -> {
+                                        Text(
+                                            text = stringResource(R.string.label_other_info),
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                        if (readerCrealityTagData != null) {
+                                            val d = readerCrealityTagData
+                                            if (d.uidHex.isNotBlank())
+                                                InfoLine(label = "卡片UID",  value = d.uidHex, style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "耗材ID",   value = d.materialId, style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "颜色",     value = "#${d.colorHex}", style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "重量",     value = d.weight, style = MaterialTheme.typography.bodySmall, inline = true)
+                                            if (d.serial.isNotBlank())
+                                                InfoLine(label = "序列号", value = d.serial, style = MaterialTheme.typography.bodySmall, inline = true)
+                                            if (d.vendorId.isNotBlank())
+                                                InfoLine(label = "厂商ID", value = d.vendorId, style = MaterialTheme.typography.bodySmall, inline = true)
+                                            if (d.mfDate.isNotBlank())
+                                                InfoLine(label = "生产日期", value = d.mfDate, style = MaterialTheme.typography.bodySmall, inline = true)
+                                            if (d.batch.isNotBlank())
+                                                InfoLine(label = "批次",   value = d.batch, style = MaterialTheme.typography.bodySmall, inline = true)
+                                            readerCrealityMaterial?.let { mat ->
+                                                if (mat.minTemp > 0 || mat.maxTemp > 0)
+                                                    InfoLine(label = "打印温度", value = "${mat.minTemp}–${mat.maxTemp} °C", style = MaterialTheme.typography.bodySmall, inline = true)
+                                                if (mat.diameter.isNotBlank())
+                                                    InfoLine(label = "线径", value = "${mat.diameter} mm", style = MaterialTheme.typography.bodySmall, inline = true)
                                             }
-                                        },
-                                        label = stringResource(R.string.reader_original_material),
-                                        modifier = Modifier.fillMaxWidth(0.7f)
-                                    )
-                                    CompactField(
-                                        value = editNotes,
-                                        onValueChange = { newVal ->
-                                            editNotes = newVal
-                                            notesDebounceJob.value?.cancel()
-                                            notesDebounceJob.value = scope.launch {
-                                                delay(500)
-                                                onNotesChange(state.trayUidHex, editOriginalMaterial, editNotes)
+                                        } else {
+                                            Text(
+                                                text = "请将创想三维耗材标签靠近读取",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    ReaderBrand.SNAPMAKER -> {
+                                        Text(
+                                            text = "快造 耗材信息",
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                        if (readerSnapmakerTagData != null) {
+                                            val d = readerSnapmakerTagData
+                                            InfoLine(label = "品牌",     value = d.vendor, style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "类型",     value = "${d.mainType} ${d.subType}".trim(), style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "颜色数",   value = "${d.colorCount}", style = MaterialTheme.typography.bodySmall, inline = true)
+                                            val colorHexStr = buildString {
+                                                val colors = listOf(d.rgb1, d.rgb2, d.rgb3, d.rgb4, d.rgb5)
+                                                    .take(d.colorCount.coerceIn(1, 5))
+                                                append(colors.joinToString(" ") { "#%06X".format(it) })
                                             }
-                                        },
-                                        label = stringResource(R.string.reader_notes),
-                                        modifier = Modifier.fillMaxWidth(0.7f)
-                                    )
+                                            InfoLine(label = "颜色",     value = colorHexStr, style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "线径",     value = if (d.diameter > 0) "${"%.2f".format(d.diameter / 100.0)} mm" else "-", style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "重量",     value = if (d.weight > 0) "${d.weight} g" else "-", style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "打印温度", value = if (d.hotendMinTemp > 0) "${d.hotendMinTemp}–${d.hotendMaxTemp} °C" else "-", style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "热床温度", value = if (d.bedTemp > 0) "${d.bedTemp} °C" else "-", style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "烘料",     value = if (d.dryingTemp > 0) "${d.dryingTemp} °C / ${d.dryingTime} h" else "-", style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "生产日期", value = d.mfDate, style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "官方认证", value = if (d.isOfficial) "✓" else "✗", style = MaterialTheme.typography.bodySmall, inline = true)
+                                            InfoLine(label = "卡片UID",  value = d.uidHex, style = MaterialTheme.typography.bodySmall, inline = true)
+                                        } else {
+                                            Text(
+                                                text = "请将快造耗材标签靠近读取",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
                                 }
                             }
+                            // 右侧 Logo / 品牌占位
                             Box(
                                 modifier = Modifier.size(88.dp, 250.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                androidx.compose.foundation.Image(
-                                    painter = painterResource(id = R.drawable.logo_mark),
-                                    contentDescription = stringResource(R.string.content_logo),
-                                    colorFilter = ColorFilter.tint(animatedLogoTintColor),
-                                    modifier = Modifier
-                                        .size(80.dp, 250.dp)
-                                        .clickable(
-                                            indication = null,
-                                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                when (readerBrand) {
+                                    ReaderBrand.BAMBU -> {
+                                        androidx.compose.foundation.Image(
+                                            painter = painterResource(id = R.drawable.logo_mark),
+                                            contentDescription = stringResource(R.string.content_logo),
+                                            colorFilter = ColorFilter.tint(animatedLogoTintColor),
+                                            modifier = Modifier
+                                                .size(80.dp, 250.dp)
+                                                .clickable(
+                                                    indication = null,
+                                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                                ) {
+                                                    meritToastVisible = false
+                                                    meritTotal += 1
+                                                    saveMeritCount(context, meritTotal)
+                                                    meritToastPaletteIndex = Random.nextInt(meritToastPalette.size)
+                                                    meritToastNonce += 1
+                                                }
+                                        )
+                                    }
+                                    ReaderBrand.CREALITY -> {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(72.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.secondaryContainer),
+                                            contentAlignment = Alignment.Center
                                         ) {
-                                            meritToastVisible = false
-                                            meritTotal += 1
-                                            saveMeritCount(context, meritTotal)
-                                            meritToastPaletteIndex = Random.nextInt(meritToastPalette.size)
-                                            meritToastNonce += 1
+                                            Text(
+                                                text = "创想",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
-                                )
+                                    }
+                                    ReaderBrand.SNAPMAKER -> {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(72.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.tertiaryContainer),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "快造",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

@@ -87,7 +87,7 @@ private const val LOG_TAG = "BambuRfidReader"
 private const val FILAMENT_JSON_NAME = "filaments_color_codes.json"
 private const val FILAMENTS_TYPE_MAPPING_FILE = "filaments_type_mapping.json"
 private const val FILAMENT_DB_NAME = "filaments.db"
-private const val FILAMENT_DB_VERSION = 18
+private const val FILAMENT_DB_VERSION = 19
 private const val CREALITY_MATERIAL_FILE = "creality_material_list.json"
 private const val CREALITY_MATERIAL_TABLE = "creality_materials"
 private const val FILAMENT_TABLE = "filaments"
@@ -97,6 +97,7 @@ private const val FILAMENT_META_KEY_LAST_MODIFIED = "filaments_last_modified"
 private const val FILAMENT_META_KEY_LOCALE = "filaments_locale"
 private const val TRAY_UID_TABLE = "filament_inventory"
 private const val SHARE_TAGS_TABLE = "share_tags"
+private const val SNAPMAKER_SHARE_TAGS_TABLE = "snapmaker_share_tags"
 private const val DEFAULT_REMAINING_PERCENT = 100
 private const val LOG_DIR_NAME = "logs"
 private const val LOG_FILE_NAME = "bambu_rfid.log"
@@ -124,6 +125,8 @@ private const val KEY_COLOR_PALETTE = "color_palette"
 private const val KEY_USER_AGREEMENT_VERSION = "user_agreement_version"
 private const val CURRENT_USER_AGREEMENT_VERSION = 1
 private const val KEY_CREALITY_ENABLED = "creality_enabled"
+private const val KEY_SNAPMAKER_TAG_ENABLED = "snapmaker_tag_enabled"
+private const val KEY_AUTO_SHARE_TAG = "auto_share_tag"
 private const val KEY_NOTICE_GUIDE_SHOWN = "notice_guide_shown"
 
 // Creality AES keys
@@ -141,6 +144,123 @@ private val CREALITY_LENGTH_TO_WEIGHT = mapOf(
 )
 private val CREALITY_WEIGHT_TO_LENGTH: Map<String, String> =
     CREALITY_LENGTH_TO_WEIGHT.entries.associate { (k, v) -> v to k }
+
+// ── 快造 (Snapmaker) RFID 密钥派生盐值 ────────────────────────────────────────
+private val SNAPMAKER_SALT_A = "Snapmaker_qwertyuiop[,.;]".toByteArray(Charsets.US_ASCII)
+private val SNAPMAKER_SALT_B = "Snapmaker_qwertyuiop[,.;]_1q2w3e".toByteArray(Charsets.US_ASCII)
+
+private val SNAPMAKER_MAIN_TYPE_MAP = mapOf(
+    0 to "Reserved", 1 to "PLA", 2 to "PETG", 3 to "ABS", 4 to "TPU", 5 to "PVA"
+)
+private val SNAPMAKER_SUB_TYPE_MAP = mapOf(
+    0 to "Reserved", 1 to "Basic", 2 to "Matte", 3 to "SnapSpeed",
+    4 to "Silk", 5 to "Support", 6 to "HF", 7 to "95A", 8 to "95A HF"
+)
+
+// 快造 RSA 公钥 (PKCS#1 PEM, key version 0‑9)
+private val SNAPMAKER_RSA_KEYS = arrayOf(
+    """
+-----BEGIN RSA PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8oEF7YuKO863TbUxnrvY
+H1JFrvCnMapm8Ho952KlfNWbf6IEDMlX6QJpBuvUkrkjWpLJJQurIWL3KFeLUhCh
+POrYdiGrdsUlp4YO037iLSlgmzo1dUdgbawAcGox1PvR/Naw5ADibubO2rN49WQR
++BkxxigvoWHSFetaoMCswQ5B/niq3byhzktgmWOcv71F4yFwcxivF8R+s0gSBL4i
+/1zNeSUZkbvP4/T0B08i3D+e6fl9xpCnINZ3P9OWcx+p3SB2o4TdmAeKV4hkT9n7
+o+/OWr92fx6qbiNKJr04oMhrRsFK6w7hitp2n8RGS64w9lhtplnBgxtbgxAYyUnp
+qwIDAQAB
+-----END RSA PUBLIC KEY-----""".trimIndent(),
+    """
+-----BEGIN RSA PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8nbtQNABbc5PkyzI0A5m
+VH/E8y23Wld0iykvTOoBYJOrPwJDmXsnSyyX84Nv6voSr8FYv3Fb2SqSdOgQLFqp
+BXvntXew8rPpq5Ll8gSzLRxE1VmEOVtZWCTJ4Wxwwi79rrFmpa/nAtUeYZIGiiud
+w2MzCHXW5G3c1FWhQ0C8vUUMfBQXmGnoHGsul6R8xld6CDCWY8ia/FvfR+KCtMRn
+VYyYguYsq4rODWJHiFCOef4FZconUR3RTh0ojvq78CsHk94goxidWzZoKcVnvWhh
+bOixTjU37W4JDECEOui3ObMMvJkzxkZo1irlAH7jTiPqhP94U/JbRDpBlHOOn67b
+GQIDAQAB
+-----END RSA PUBLIC KEY-----""".trimIndent(),
+    """
+-----BEGIN RSA PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxZQPYewwMFaPlcEHq+SH
+QS1C1NhVmAaY56qxLyHJ4aNc2iWdCx4/9ZKY4CL6xkeCD88Zndv/xzImplRdoAzo
+whD47Vm4iuq8+NqHUI8na6ISd+MZ/O6/eo/ggaEZBX8lR+Yf0qfWtntsI9flUOoJ
+mq1IXvNXqOxflUmPyffT40QSkAN4Rr3scB3ozlxuJZehWM/lUmZ1H5PQDwAqsM0T
+Rj6ChzVmUbSvwEvbDTwpXkpMA0C5//OW0T//IKDEBYxEl928vYbraLRDRIetgdaD
+o+77+ztfOv4AyP/ipikprHwIWi7yga5KUXq/XpNPy6cPISZD+/LBUJBxLELspREP
+rQIDAQAB
+-----END RSA PUBLIC KEY-----""".trimIndent(),
+    """
+-----BEGIN RSA PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvK8cJyeFeTkFgkSLCCAg
+EgR9KAvIHmvK8CRdtn+W6PiIbN04MFIg8jiYW/3fq+AcBFFMo+HtR2gym8JNVx2I
+RDI4WdfbR/0gaIHjOQ41OwlXmqqSkDsFmjxVI6bDRZYpHkOfkC+9Vi1Aii4l/Yq9
+O7s+2j4zP9GoUWWJPb3mW07Vu+EnHB/XIuaoDJVQAS+ov3xTotCeKdcdgySnNP5g
+kOvWUvWtwNQldCRcQ0eo3j5RO+4J4IRK2J8q7BrdV/gbJUE/BBPIOuURPLzNJJO3
+wgx4PEwlb5uYEUL35ARL7NzL8ZOxebzs5H4tXuWrBhALw6O33Tfg3TmTmwR2JUpv
+7QIDAQAB
+-----END RSA PUBLIC KEY-----""".trimIndent(),
+    """
+-----BEGIN RSA PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvafhk7Bdb3F+5B9w7YXv
+chrNzl09QkZc27NLxL0ViRitGQhX9KC/xVg+XkBGI8XfioAwYkJ3jYgwmci5gJOL
+ofPyNXcFtvtzq2NZNuDZY26krrXLORhS1o8ue92RB2gM92Rc2heWVrsvLycNl2Qz
+OUjUEGmWpSMo98xIsgkTZJ4aYxWVN86yqknOcHVpTmcr5SBRB90K9hTRtsaMD97O
+FYVc7AA/TGwqFJOnXXzWczWtg7kUY2vqCHwsvKs3G/EIFKOIe1n37V94OcxHTySC
+co9Kc6Y0bGFIwIruinH1WkFVt6TAzo+0ZdZy5Sq493AG9y1RZ5nYj5qUmc1PMmrD
+gwIDAQAB
+-----END RSA PUBLIC KEY-----""".trimIndent(),
+    """
+-----BEGIN RSA PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxWdxd7qeouSFbZ2Sldv3
+apDrgAupOYiDRkO85C+qkZaezOzqW0EsOV0x7nG/smw++TRfHyGIK4gXCdg1JfNR
+WYjqckRdnLYMzGdDk24VV5Bbrsgska0v0Oy1ucz3CYu+F22ais00OqK0MY0B96MI
+/B/0pRSTAIyxvC6LjhHy8DYyPdqNF9EMikKfAfcn7ytsH1PoSSGVtrZqyNe5OLrW
+yAw+FQsTg/VFJcYxPTQJ1ymwQmDCdKgApe3PVajyYswoIA7R0S8ujau0aAFEO3dU
+GDEwjOnaHfwFlg3OKMFJTxc2sl/WEB8xtWuKl0Guf0VnzWJ6noxqf/DiaN1fuHG0
+AwIDAQAB
+-----END RSA PUBLIC KEY-----""".trimIndent(),
+    """
+-----BEGIN RSA PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqF+YJNHLHC6c25oTDgNg
+liahUxWBPSkgght1/gJu5vBRDKWEn6i/RuKAFdTOsH+Hlvr5qWms7bBUHx78UMF+
+FF1Nq9tb4jhFuqq4HWsBBjNnU6O0JhFTjKJU2nudmphXlpdLQfcKSIYMQe795GHL
+izh8WsNTcTHNNBkjhi7y4c4RUqnJso0L6vrf0B3EB/9DDUJitrwfw+1/OrKOEVEP
+624sEa802cHfb+BG9zKBXjFwzYCYF9gWey9yeA3UA7EYmPpqA1lqNv8m0r7YjZ4n
+uGBDjs+AXaGtdqrW3IUtkUF2vWwNSRncbcXi3mNfzslrtPhsDVAFki4vDSw7yNht
+2wIDAQAB
+-----END RSA PUBLIC KEY-----""".trimIndent(),
+    """
+-----BEGIN RSA PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuKWRCTTgxPltfflWHdhu
+2ITxWC/LTEl7OtatNWFhMFQZF2J5SN/45bjH6xIPTcDglTSl2/UMC1D/ugiq+j0z
+dGSdE7xn3ZSzLTMCwgRkvXmd8aQgafBYbB7E6oAgus+6lRXZPwnMfZAe0yaJNHyt
+1Wd8ZUlRY7BHSPPtmG1liVEzxoTb6urB6mK49r24+oC7xa65q5NSdlZWSTeaK4Xt
+DVVDiwe+uubNTm59KnVAKgBMNd3qN942pH6fo/dBz++BzJVEG/qJewHUTGZAeIl+
+CgqhSEbmEIgolsDgaKY99ZWa2FWJdo+ohYhmjc92TyB9kWw6yIwez+tlRUkssLGt
+SwIDAQAB
+-----END RSA PUBLIC KEY-----""".trimIndent(),
+    """
+-----BEGIN RSA PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAt7XOTs6P2xB8v8/xWVdR
+wVefphRDXSuv74RObtr0pwLTc7BytkcDw8r60BNPv9hGDpW2S1szxqS8x4EaOHP7
+81qNpIUULlUdXxty1RvpSdfRb044kpwl7A/s4OEakkyJZF1ed+Qte1FqOFDDIZ+l
+g+Co8FjOwWixoSyIlR22mEP7r6Y98GL5tnSohkVoGAgEipswWb6549mssjZmES+J
+hB0axY6Dl/LlDYxN6jjUZwSIo7bw0GXGm9ScW2qTVaT1m2A9etpD6OIG+iQVLQqP
+whVBs5q0o/EM4nBN88RBsF2OmfkcZPJ2NdX6o3qx+pCZ9NDgkHjGDZdnGEnM5Lu2
+dwIDAQAB
+-----END RSA PUBLIC KEY-----""".trimIndent(),
+    """
+-----BEGIN RSA PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz/d5C5FpqlcF7NbUEvBN
+fiDJWH0BF63PEwHPiX+cS6l+q4NqqYI167u1pGkZGJV1njgGYFTM08x2KO7/bk6o
+CWcGuKWNM8Tp1+tv3XioNGVCnIpHmdUx5F9qcXlPtDx74wQk/+JZLQ/sLnLvHcV3
+YTaz55fpyzVUHkgXusdVynSyAt3ywWWQRcjp3sspGa/udC0j6LCvrzqLACv3gMGA
+Id0b6REzjSn03UzkwBIwSb8DszieeNhaCOK4M/TxPFNyrhQRYcAvhiZJu+tylqJs
+VP+gaWFvElFeFkxcHvYXHdJPlJLjYeT51hm/pdll26yYLhpeBa0inHwSqv4D3jFZ
+PQIDAQAB
+-----END RSA PUBLIC KEY-----""".trimIndent()
+)
+
 private val WRITE_HKDF_SALT = byteArrayOf(
     0x9a.toByte(), 0x75.toByte(), 0x9c.toByte(), 0xf2.toByte(),
     0xc4.toByte(), 0xf7.toByte(), 0xca.toByte(), 0xff.toByte(),
@@ -483,7 +603,50 @@ data class CrealityTagData(
     val vendorId: String,
     val batch: String,
     val lengthCode: String,
-    val rawPlaintext: String
+    val rawPlaintext: String,
+    val uidHex: String = "",
+    val mfDate: String = ""
+)
+
+data class SnapmakerTagData(
+    val vendor: String,
+    val manufacturer: String,
+    val mainType: String,
+    val subType: String,
+    val colorCount: Int,
+    val rgb1: Int,
+    val rgb2: Int,
+    val rgb3: Int,
+    val rgb4: Int,
+    val rgb5: Int,
+    val diameter: Int,   // unit: 0.01 mm, e.g. 175 = 1.75 mm
+    val weight: Int,     // grams
+    val dryingTemp: Int,
+    val dryingTime: Int, // hours
+    val hotendMaxTemp: Int,
+    val hotendMinTemp: Int,
+    val bedTemp: Int,
+    val mfDate: String,
+    val isOfficial: Boolean,
+    val uidHex: String,
+    val rsaKeyVersion: Int
+)
+
+enum class ReaderBrand { BAMBU, CREALITY, SNAPMAKER }
+
+data class SnapmakerShareTagItem(
+    val uid: String,
+    val vendor: String,
+    val manufacturer: String,
+    val mainType: Int,
+    val subType: Int = 0,
+    val diameter: Int,   // unit: 0.01 mm
+    val weight: Int,     // grams
+    val rgb1: Int,
+    val mfDate: String,
+    val rawBlocks: List<ByteArray?>,
+    val dbId: Long = -1L,
+    val copyCount: Int = 0
 )
 
 data class CrealityWritePending(
@@ -531,6 +694,11 @@ class MainActivity : ComponentActivity() {
     private var themeMode by mutableStateOf(ThemeMode.SYSTEM)
     private var colorPalette by mutableStateOf(ColorPalette.OCEAN)
     private var crealityEnabled by mutableStateOf(false) // 控制创想三维RFID页面显示
+    private var snapmakerTagEnabled by mutableStateOf(false) // 控制快造复制页面显示
+    private var snapmakerShareTagItems by mutableStateOf<List<SnapmakerShareTagItem>>(emptyList())
+    private var snapmakerShareLoading by mutableStateOf(false)
+    private var snapmakerWriteStatusMessage by mutableStateOf("")
+    private var pendingSnapmakerWriteItem by mutableStateOf<SnapmakerShareTagItem?>(null)
     private var crealityStatusMessage by mutableStateOf("")
     private var crealityLastTagData by mutableStateOf<CrealityTagData?>(null)
     private var pendingCrealityWrite by mutableStateOf<CrealityWritePending?>(null)
@@ -540,9 +708,15 @@ class MainActivity : ComponentActivity() {
     private var forceOverwriteImport by mutableStateOf(false) // 控制导入标签包时是否覆盖同UID文件
     private var formatTagDebugEnabled by mutableStateOf(false) // 控制格式化标签调试弹窗
     private var inventoryEnabled by mutableStateOf(false) // 控制库存和数据页面显示
+    private var autoShareTag by mutableStateOf(true)     // 读取完整数据后自动上传到共享服务器
     private var hideCopiedTags by mutableStateOf(true)   // 隐藏已复制标签
     private var dualTagMode by mutableStateOf(false)      // 双标签模式：复制2次才隐藏
     private var tagViewMode by mutableStateOf("list")     // 复制页视图：list/category
+    private var readerBrand by mutableStateOf(ReaderBrand.BAMBU)   // 识别页品牌选择
+    private var readerSnapmakerTagData by mutableStateOf<SnapmakerTagData?>(null)
+    private var readerCrealityTagData by mutableStateOf<CrealityTagData?>(null)
+    private var readerCrealityMaterial by mutableStateOf<CrealityMaterial?>(null)
+    private var readerBrandStatus by mutableStateOf("")
     private var tts: TextToSpeech? = null
     private var ttsReady by mutableStateOf(false)
     private var ttsLanguageReady by mutableStateOf(false)
@@ -554,6 +728,7 @@ class MainActivity : ComponentActivity() {
     private var tagPreselectedFileName by mutableStateOf<String?>(null)
     // 原始读卡临时缓存：readTag 仅负责写入；解析函数从此读取。
     private var latestRawTagData: RawTagReadData? = null
+    private var latestSnapmakerRawData: RawTagReadData? = null
     private var shareTagItems by mutableStateOf<List<ShareTagItem>>(emptyList())
     private var writeStatusMessage by mutableStateOf("")
     private var pendingWriteItem by mutableStateOf<ShareTagItem?>(null)
@@ -589,6 +764,21 @@ class MainActivity : ComponentActivity() {
                 withContext(Dispatchers.Main) {
                     miscStatusMessage = message
                     refreshShareTagItemsAsync()
+                }
+            }
+        }
+    private val importSnapmakerTagPackageLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            if (uri == null) {
+                miscStatusMessage = uiString(R.string.misc_select_tag_package_canceled)
+                return@registerForActivityResult
+            }
+            miscStatusMessage = uiString(R.string.misc_importing_tag_package)
+            lifecycleScope.launch(Dispatchers.IO) {
+                val message = importSnapmakerTagPackageFromZipUri(uri)
+                withContext(Dispatchers.Main) {
+                    miscStatusMessage = message
+                    refreshSnapmakerShareTagItemsAsync()
                 }
             }
         }
@@ -676,6 +866,8 @@ class MainActivity : ComponentActivity() {
                     miscStatusMessage = "正在格式化"
                 } else if (pendingCuidTest) {
                     miscStatusMessage = "正在检测..."
+                } else if (pendingSnapmakerWriteItem != null) {
+                    snapmakerWriteStatusMessage = "正在写入快造标签..."
                 } else if (pendingCrealityWrite != null) {
                     crealityStatusMessage = uiString(R.string.creality_write_in_progress)
                 }
@@ -828,6 +1020,29 @@ class MainActivity : ComponentActivity() {
                     }
                     pendingCuidTest = false
                 }
+            } else if (pendingSnapmakerWriteItem != null) {
+                val targetItem = pendingSnapmakerWriteItem!!
+                val writeResult = writeSnapmakerTagFromDump(tag, targetItem) { status ->
+                    runOnUiThread { snapmakerWriteStatusMessage = status }
+                }
+                runOnUiThread {
+                    if (writeResult.contains("成功") || writeResult.contains("success", ignoreCase = true)) {
+                        playFeedbackTone(FeedbackTone.SUCCESS)
+                        if (targetItem.dbId > 0) {
+                            filamentDbHelper?.writableDatabase?.let { db ->
+                                filamentDbHelper!!.incrementSnapmakerShareTagCopyCount(db, targetItem.dbId)
+                            }
+                            snapmakerShareTagItems = snapmakerShareTagItems.map { si ->
+                                if (si.dbId == targetItem.dbId) si.copy(copyCount = si.copyCount + 1) else si
+                            }
+                        }
+                        pendingSnapmakerWriteItem = null
+                        snapmakerWriteStatusMessage = "写入成功"
+                    } else {
+                        playFeedbackTone(FeedbackTone.FAILURE)
+                        snapmakerWriteStatusMessage = writeResult
+                    }
+                }
             } else if (pendingCrealityWrite != null) {
                 val target = pendingCrealityWrite!!
                 val result = writeCrealityTag(tag, target)
@@ -854,11 +1069,67 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             } else {
-                val result = readTag(tag)
-                runOnUiThread {
-                    uiState = result
-                    shouldNavigateToReader = true
-                    maybeSpeakResult(result)
+                when (readerBrand) {
+                    ReaderBrand.BAMBU -> {
+                        val result = readTag(tag)
+                        runOnUiThread {
+                            uiState = result
+                            shouldNavigateToReader = true
+                            maybeSpeakResult(result)
+                        }
+                        val rawSnapshot = latestRawTagData
+                        if (autoShareTag && rawSnapshot != null &&
+                            com.m0h31h31.bamburfidreader.utils.TagShareUploader.isComplete(rawSnapshot)
+                        ) {
+                            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                com.m0h31h31.bamburfidreader.utils.TagShareUploader.uploadRawTag(
+                                    applicationContext, "bambu", rawSnapshot
+                                )
+                            }
+                        }
+                    }
+                    ReaderBrand.CREALITY -> {
+                        val result = readCrealityTag(tag)
+                        val material = result?.let {
+                            filamentDbHelper?.getCrealityMaterialById(
+                                filamentDbHelper!!.readableDatabase, it.materialId
+                            )
+                        }
+                        runOnUiThread {
+                            if (result != null) {
+                                readerCrealityTagData = result
+                                readerCrealityMaterial = material
+                                readerBrandStatus = "读取成功"
+                                playFeedbackTone(FeedbackTone.SUCCESS)
+                            } else {
+                                readerBrandStatus = "读取失败"
+                                playFeedbackTone(FeedbackTone.FAILURE)
+                            }
+                        }
+                    }
+                    ReaderBrand.SNAPMAKER -> {
+                        val result = readSnapmakerTag(tag)
+                        runOnUiThread {
+                            if (result != null) {
+                                readerSnapmakerTagData = result
+                                readerBrandStatus = "读取成功"
+                                playFeedbackTone(FeedbackTone.SUCCESS)
+                            } else {
+                                readerBrandStatus = "读取失败"
+                                playFeedbackTone(FeedbackTone.FAILURE)
+                            }
+                        }
+                        val snapRaw = latestSnapmakerRawData
+                        if (autoShareTag && snapRaw != null &&
+                            com.m0h31h31.bamburfidreader.utils.TagShareUploader.isComplete(snapRaw)
+                        ) {
+                            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                com.m0h31h31.bamburfidreader.utils.TagShareUploader.uploadRawTag(
+                                    applicationContext, "snapmaker", snapRaw
+                                )
+                            }
+                        }
+                    }
                 }
             }
         } finally {
@@ -903,7 +1174,9 @@ class MainActivity : ComponentActivity() {
         val uiPrefs = getSharedPreferences(UI_PREFS_NAME, Context.MODE_PRIVATE)
         voiceEnabled = uiPrefs.getBoolean(KEY_VOICE_ENABLED, false)
         crealityEnabled = uiPrefs.getBoolean(KEY_CREALITY_ENABLED, false)
+        snapmakerTagEnabled = uiPrefs.getBoolean(KEY_SNAPMAKER_TAG_ENABLED, false)
         inventoryEnabled = uiPrefs.getBoolean(KEY_INVENTORY_ENABLED, true)
+        autoShareTag = uiPrefs.getBoolean(KEY_AUTO_SHARE_TAG, true)
         hideCopiedTags = uiPrefs.getBoolean(KEY_HIDE_COPIED_TAGS, true)
         dualTagMode = uiPrefs.getBoolean(KEY_DUAL_TAG_MODE, false)
         tagViewMode = uiPrefs.getString(KEY_TAG_VIEW_MODE, "list") ?: "list"
@@ -1010,6 +1283,28 @@ class MainActivity : ComponentActivity() {
                         crealityEnabled = enabled
                         uiPrefs.edit().putBoolean(KEY_CREALITY_ENABLED, enabled).apply()
                     },
+                    snapmakerTagEnabled = snapmakerTagEnabled,
+                    onSnapmakerTagEnabledChange = { enabled ->
+                        snapmakerTagEnabled = enabled
+                        uiPrefs.edit().putBoolean(KEY_SNAPMAKER_TAG_ENABLED, enabled).apply()
+                    },
+                    snapmakerShareTagItems = snapmakerShareTagItems,
+                    snapmakerShareLoading = snapmakerShareLoading,
+                    snapmakerWriteStatusMessage = snapmakerWriteStatusMessage,
+                    snapmakerWriteInProgress = pendingSnapmakerWriteItem != null,
+                    onSnapmakerTagScreenEnter = { refreshSnapmakerShareTagItemsAsync() },
+                    onStartWriteSnapmakerTag = { item -> enqueueSnapmakerWriteTask(item) },
+                    onDeleteSnapmakerTagItem = { item -> deleteSnapmakerShareTagItem(item) },
+                    onCancelSnapmakerWrite = {
+                        pendingSnapmakerWriteItem = null
+                        snapmakerWriteStatusMessage = ""
+                    },
+                    onSelectImportSnapmakerTagPackage = {
+                        openSnapmakerTagPackagePicker()
+                        val msg = uiString(R.string.misc_select_tag_package_prompt)
+                        miscStatusMessage = msg
+                        msg
+                    },
                     crealityTagData = crealityLastTagData,
                     crealityStatusMessage = crealityStatusMessage,
                     crealityWriteInProgress = pendingCrealityWrite != null,
@@ -1025,10 +1320,27 @@ class MainActivity : ComponentActivity() {
                         crealityLastTagData = null
                     },
                     onActiveRouteChange = { route -> currentActiveRoute = route },
+                    readerBrand = readerBrand,
+                    onReaderBrandChange = { brand ->
+                        readerBrand = brand
+                        readerBrandStatus = if (brand == ReaderBrand.BAMBU) "" else uiString(R.string.status_waiting_tag)
+                        readerCrealityTagData = null
+                        readerCrealityMaterial = null
+                        readerSnapmakerTagData = null
+                    },
+                    readerCrealityTagData = readerCrealityTagData,
+                    readerCrealityMaterial = readerCrealityMaterial,
+                    readerSnapmakerTagData = readerSnapmakerTagData,
+                    readerBrandStatus = readerBrandStatus,
                     inventoryEnabled = inventoryEnabled,
                     onInventoryEnabledChange = { enabled ->
                         inventoryEnabled = enabled
                         uiPrefs.edit().putBoolean(KEY_INVENTORY_ENABLED, enabled).apply()
+                    },
+                    autoShareTag = autoShareTag,
+                    onAutoShareTagChange = { enabled ->
+                        autoShareTag = enabled
+                        uiPrefs.edit().putBoolean(KEY_AUTO_SHARE_TAG, enabled).apply()
                     },
                     hideCopiedTags = hideCopiedTags,
                     onHideCopiedTagsChange = { enabled ->
@@ -1704,6 +2016,255 @@ class MainActivity : ComponentActivity() {
         }
     }
     
+    // ── 快造标签包导入 ──────────────────────────────────────────────────────────
+
+    private fun openSnapmakerTagPackagePicker() {
+        importSnapmakerTagPackageLauncher.launch(
+            arrayOf(
+                SHARE_IMPORT_ZIP_MIME,
+                "application/x-zip-compressed",
+                "application/octet-stream",
+                "*/*"
+            )
+        )
+    }
+
+    private fun importSnapmakerTagPackageFromZipUri(uri: Uri): String {
+        val dbHelper = filamentDbHelper ?: return "数据库不可用"
+        val db = dbHelper.writableDatabase
+        return try {
+            var extractedCount = 0
+            var skippedCount = 0
+            var invalidCount = 0
+
+            val existingUids = dbHelper.getAllSnapmakerShareTagUids(db)
+            val existingUidSet = existingUids.map { it.uppercase(Locale.US) }.toMutableSet()
+
+            contentResolver.openInputStream(uri)?.use { input ->
+                ZipInputStream(input).use { zip ->
+                    var entry = zip.nextEntry
+                    while (entry != null) {
+                        if (!entry.isDirectory && entry.name.lowercase(Locale.US).endsWith(".txt")) {
+                            val incomingUid = File(entry.name).nameWithoutExtension.uppercase(Locale.US)
+                            val alreadyExists = incomingUid.isNotBlank() && existingUidSet.contains(incomingUid)
+                            val bytes = zip.readBytes()
+
+                            if (alreadyExists) {
+                                skippedCount++
+                                zip.closeEntry()
+                                entry = zip.nextEntry
+                                continue
+                            }
+
+                            val content = String(bytes, Charsets.UTF_8)
+                            val rawBlocks = parseHexTagFileStrict(content)
+                            if (rawBlocks == null) {
+                                invalidCount++
+                                zip.closeEntry()
+                                entry = zip.nextEntry
+                                continue
+                            }
+
+                            if (!isValidSnapmakerTag(rawBlocks)) {
+                                invalidCount++
+                                zip.closeEntry()
+                                entry = zip.nextEntry
+                                continue
+                            }
+
+                            val fields = parseSnapmakerShareFields(rawBlocks)
+                            val normalized = content.trim().lines()
+                                .map { it.trim() }.filter { it.isNotBlank() }.take(64).joinToString("\n")
+
+                            dbHelper.insertSnapmakerShareTag(
+                                db,
+                                uid = incomingUid,
+                                vendor = fields.vendor,
+                                manufacturer = fields.manufacturer,
+                                mainType = fields.mainType,
+                                diameter = fields.diameter,
+                                weight = fields.weight,
+                                rgb1 = fields.rgb1,
+                                mfDate = fields.mfDate,
+                                rawData = normalized
+                            )
+                            extractedCount++
+                            existingUidSet.add(incomingUid)
+                        }
+                        zip.closeEntry()
+                        entry = zip.nextEntry
+                    }
+                }
+            } ?: return "读取标签包失败"
+
+            when {
+                extractedCount == 0 && skippedCount == 0 && invalidCount == 0 ->
+                    "导入完成，但压缩包内未发现 txt 标签数据"
+                extractedCount == 0 ->
+                    "导入完成：格式无效 $invalidCount 个，重复跳过 $skippedCount 个"
+                else ->
+                    "快造标签包导入完成: 导入 $extractedCount 个，格式无效 $invalidCount 个，跳过重复 $skippedCount 个"
+            }
+        } catch (e: Exception) {
+            logDebug("导入快造标签包失败: ${e.message}")
+            "导入快造标签包失败: ${e.message.orEmpty()}"
+        }
+    }
+
+    private data class SnapmakerShareFields(
+        val vendor: String,
+        val manufacturer: String,
+        val mainType: Int,
+        val subType: Int,
+        val diameter: Int,
+        val weight: Int,
+        val rgb1: Int,
+        val mfDate: String
+    )
+
+    private fun parseSnapmakerShareFields(rawBlocks: List<ByteArray?>): SnapmakerShareFields {
+        fun le16(block: ByteArray?, offset: Int): Int {
+            if (block == null || offset + 1 >= block.size) return 0
+            return ((block[offset + 1].toInt() and 0xFF) shl 8) or (block[offset].toInt() and 0xFF)
+        }
+        fun readRgb(block: ByteArray?, offset: Int): Int {
+            if (block == null || offset + 2 >= block.size) return 0
+            return ((block[offset].toInt() and 0xFF) shl 16) or
+                   ((block[offset + 1].toInt() and 0xFF) shl 8) or
+                   (block[offset + 2].toInt() and 0xFF)
+        }
+
+        val block1 = rawBlocks.getOrNull(1)  // sector0 block1: vendor
+        val block2 = rawBlocks.getOrNull(2)  // sector0 block2: manufacturer
+        val block4 = rawBlocks.getOrNull(4)  // sector1 block0: mainType/subType/colors
+        val block5 = rawBlocks.getOrNull(5)  // sector1 block1: rgb values
+        val block8 = rawBlocks.getOrNull(8)  // sector2 block0: diameter/weight
+        val block10 = rawBlocks.getOrNull(10) // sector2 block2: mfDate
+
+        val vendor = block1?.let { String(it, 0, minOf(16, it.size), Charsets.US_ASCII).trimEnd('\u0000') }.orEmpty()
+        val manufacturer = block2?.let { String(it, 0, minOf(16, it.size), Charsets.US_ASCII).trimEnd('\u0000') }.orEmpty()
+        val mainType = le16(block4, 2)
+        val subType = le16(block4, 4)
+        val diameter = le16(block8, 0)
+        val weight = le16(block8, 2)
+        val rgb1 = readRgb(block5, 0)
+        val mfDate = block10?.let { String(it, 0, minOf(8, it.size), Charsets.US_ASCII).trimEnd('\u0000') }.orEmpty()
+
+        return SnapmakerShareFields(vendor, manufacturer, mainType, subType, diameter, weight, rgb1, mfDate)
+    }
+
+    private fun isValidSnapmakerTag(rawBlocks: List<ByteArray?>): Boolean {
+        // 检查所有 16 个扇区的 trailer 块访问字节
+        for (sector in 0 until 16) {
+            val trailer = rawBlocks.getOrNull(sector * 4 + 3) ?: return false
+            if (trailer.size < 16) return false
+            if (trailer[6] != 0x87.toByte() ||
+                trailer[7] != 0x87.toByte() ||
+                trailer[8] != 0x87.toByte() ||
+                trailer[9] != 0x69.toByte()
+            ) return false
+        }
+        // 验证 vendor 字段非空（block1，offset 16）
+        val block1 = rawBlocks.getOrNull(1) ?: return false
+        val vendor = String(block1, 0, minOf(16, block1.size), Charsets.US_ASCII).trimEnd('\u0000')
+        return vendor.isNotBlank()
+    }
+
+    private fun refreshSnapmakerShareTagItemsAsync() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val dbHelper = filamentDbHelper ?: return@launch
+            withContext(Dispatchers.Main) { snapmakerShareLoading = true }
+            val rows = dbHelper.getAllSnapmakerShareTagRows(dbHelper.readableDatabase)
+            val items = rows.mapNotNull { row ->
+                val rawData = row.rawData ?: return@mapNotNull null
+                val rawBlocks = parseHexTagFileStrict(rawData) ?: return@mapNotNull null
+                val block4 = rawBlocks.getOrNull(4)
+                val subType = if (block4 != null && block4.size >= 6)
+                    ((block4[5].toInt() and 0xFF) shl 8) or (block4[4].toInt() and 0xFF)
+                else 0
+                SnapmakerShareTagItem(
+                    uid = row.uid,
+                    vendor = row.vendor.orEmpty(),
+                    manufacturer = row.manufacturer.orEmpty(),
+                    mainType = row.mainType,
+                    subType = subType,
+                    diameter = row.diameter,
+                    weight = row.weight,
+                    rgb1 = row.rgb1,
+                    mfDate = row.mfDate.orEmpty(),
+                    rawBlocks = rawBlocks,
+                    dbId = row.id,
+                    copyCount = row.copyCount
+                )
+            }
+            withContext(Dispatchers.Main) {
+                snapmakerShareTagItems = items
+                snapmakerShareLoading = false
+            }
+        }
+    }
+
+    private fun deleteSnapmakerShareTagItem(item: SnapmakerShareTagItem): String {
+        val dbHelper = filamentDbHelper ?: return "数据库不可用"
+        dbHelper.deleteSnapmakerShareTagByUid(dbHelper.writableDatabase, item.uid)
+        snapmakerShareTagItems = snapmakerShareTagItems.filter { it.uid != item.uid }
+        return "已删除"
+    }
+
+    private fun enqueueSnapmakerWriteTask(item: SnapmakerShareTagItem) {
+        pendingSnapmakerWriteItem = item
+        snapmakerWriteStatusMessage = "请将空白卡贴近手机..."
+    }
+
+    private fun writeSnapmakerTagFromDump(
+        tag: Tag,
+        item: SnapmakerShareTagItem,
+        onStatusUpdate: ((String) -> Unit)? = null
+    ): String {
+        val mifare = MifareClassic.get(tag) ?: return "写入失败：标签不支持 MIFARE Classic"
+        val sourceBlocks = item.rawBlocks
+        if (sourceBlocks.isEmpty()) return "写入失败：源数据为空"
+
+        val ffKey = ByteArray(6) { 0xFF.toByte() }
+        val targetSectorCount = minOf(16, mifare.sectorCount)
+        return try {
+            mifare.connect()
+            Thread.sleep(700)
+            for (sector in 0 until targetSectorCount) {
+                val trailerIndex = sector * 4 + 3
+                val trailerData = sourceBlocks.getOrNull(trailerIndex)
+                val sourceKeyA = trailerData?.takeIf { it.size == 16 }?.copyOfRange(0, 6)
+                val sourceKeyB = trailerData?.takeIf { it.size == 16 }?.copyOfRange(10, 16)
+
+                val authenticated = authenticateSectorWithRetry(
+                    mifare = mifare,
+                    sectorIndex = sector,
+                    keysA = listOf(ffKey, sourceKeyA),
+                    keysB = listOf(ffKey, sourceKeyB)
+                )
+                if (!authenticated) return "写入失败：扇区 $sector 认证失败"
+
+                onStatusUpdate?.invoke("正在写入扇区 ${sector + 1}/$targetSectorCount...")
+                val startBlock = mifare.sectorToBlock(sector)
+                for (offset in 0 until 4) {
+                    val blockIndex = startBlock + offset
+                    val targetData = sourceBlocks.getOrNull(blockIndex)
+                        ?: return "写入失败：区块 $blockIndex 源数据缺失"
+                    if (targetData.size != 16) return "写入失败：区块 $blockIndex 数据长度异常"
+                    if (!writeBlockWithRetry(mifare, blockIndex, targetData)) {
+                        return "写入失败：区块 $blockIndex 写入异常"
+                    }
+                    Thread.sleep(20)
+                }
+            }
+            "写入成功"
+        } catch (e: Exception) {
+            "写入失败：${e.message.orEmpty()}"
+        } finally {
+            try { mifare.close() } catch (_: Exception) {}
+        }
+    }
+
     /**
      * 保存全部扇区数据到文件
      */
@@ -3459,17 +4020,24 @@ class MainActivity : ComponentActivity() {
         return raw.padEnd(48, ' ').toByteArray(Charsets.UTF_8)
     }
 
-    private fun parseCrealityTagString(raw: String): CrealityTagData? {
+    private fun parseCrealityTagString(raw: String, uidHex: String = ""): CrealityTagData? {
         if (raw.length < 48) return null
+        val serial = raw.substring(28, 34).trim().trimStart('0').ifEmpty { "" }
+        val vendorId = raw.substring(5, 9).trim()
+        // 尾部14字节可能含生产日期（写入端填充全零时不显示）
+        val tailRaw = raw.substring(34).trim().trimEnd('\u0000', ' ')
+        val mfDate = if (tailRaw.all { it == '0' }) "" else tailRaw
         return CrealityTagData(
             materialId = raw.substring(12, 17).trim(),
             colorHex = raw.substring(18, 24).trim(),
             weight = CREALITY_LENGTH_TO_WEIGHT[raw.substring(24, 28)] ?: "未知",
-            serial = "",
-            vendorId = "",
+            serial = serial,
+            vendorId = vendorId,
             batch = "",
             lengthCode = raw.substring(24, 28),
-            rawPlaintext = raw
+            rawPlaintext = raw,
+            uidHex = uidHex,
+            mfDate = mfDate
         )
     }
 
@@ -3491,7 +4059,8 @@ class MainActivity : ComponentActivity() {
             val b5 = readBlockWithRetry(mifare, 5) ?: return null
             val b6 = readBlockWithRetry(mifare, 6) ?: return null
             val decrypted = decryptCrealityData48(b4 + b5 + b6)
-            parseCrealityTagString(String(decrypted, Charsets.UTF_8))
+            val uidHex = uid.joinToString("") { "%02X".format(it) }
+            parseCrealityTagString(String(decrypted, Charsets.UTF_8), uidHex)
         } catch (e: Exception) {
             logDebug("Creality read failed: ${e.message}")
             null
@@ -3534,6 +4103,207 @@ class MainActivity : ComponentActivity() {
     }
 
     // ── End Creality ─────────────────────────────────────────────────────────
+
+    // ── 快造 (Snapmaker) RFID ─────────────────────────────────────────────────
+
+    /** HKDF-SHA256 单块派生：Extract (HMAC(salt, ikm)) 然后 Expand 取 length 字节 */
+    private fun snapmakerHkdfDerive(ikm: ByteArray, salt: ByteArray, context: ByteArray, length: Int): ByteArray {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(salt, "HmacSHA256"))
+        val prk = mac.doFinal(ikm)
+        mac.init(SecretKeySpec(prk, "HmacSHA256"))
+        mac.update(context)
+        mac.update(0x01.toByte())
+        return mac.doFinal().copyOf(length)
+    }
+
+    /** 为 16 个扇区分别派生 KeyA / KeyB */
+    private fun deriveSnapmakerKeys(uid: ByteArray): Pair<List<ByteArray>, List<ByteArray>> {
+        val keysA = (0 until 16).map { i ->
+            snapmakerHkdfDerive(uid, SNAPMAKER_SALT_A, "key_a_$i".toByteArray(Charsets.US_ASCII), 6)
+        }
+        val keysB = (0 until 16).map { i ->
+            snapmakerHkdfDerive(uid, SNAPMAKER_SALT_B, "key_b_$i".toByteArray(Charsets.US_ASCII), 6)
+        }
+        return Pair(keysA, keysB)
+    }
+
+    /** 读取 Snapmaker 标签，返回解析结果；认证或解析失败返回 null */
+    private fun readSnapmakerTag(tag: Tag): SnapmakerTagData? {
+        val mifare = MifareClassic.get(tag) ?: return null
+        return try {
+            if (!mifare.isConnected) mifare.connect()
+            Thread.sleep(300)
+            val uid = tag.id ?: return null
+            val (keysA, keysB) = deriveSnapmakerKeys(uid)
+
+            // 组装 1024 字节缓冲区：16 扇区 × 4 块 × 16 字节（含 trailer 占位）
+            val dataBuf = ByteArray(1024)
+            var anySuccess = false
+            for (sector in 0 until 16) {
+                val authenticated = authenticateSectorWithRetry(
+                    mifare = mifare,
+                    sectorIndex = sector,
+                    keysA = listOf(keysA[sector]),
+                    keysB = listOf(keysB[sector])
+                )
+                if (!authenticated) continue
+                val firstBlock = mifare.sectorToBlock(sector)
+                for (blockInSector in 0 until 4) {
+                    val block = readBlockWithRetry(mifare, firstBlock + blockInSector)
+                    if (block != null) {
+                        block.copyInto(dataBuf, sector * 64 + blockInSector * 16)
+                        if (blockInSector < 3) anySuccess = true
+                    }
+                }
+            }
+            if (!anySuccess) return null
+
+            // 捕获原始块数据和密钥，供自动共享上传使用（与拓竹格式一致）
+            val uidHexSnap = uid.joinToString("") { "%02X".format(it) }
+            val rawBlocksSnap: List<ByteArray?> = (0 until 64).map { blockIndex ->
+                val sector = blockIndex / 4
+                val blockInSector = blockIndex % 4
+                if (blockInSector == 3) {
+                    // 重建 trailer 块：KeyA(6) + 访问字节(4) + KeyB(6)
+                    val trailerOffset = sector * 64 + 48
+                    val accessBytes = dataBuf.copyOfRange(trailerOffset + 6, trailerOffset + 10)
+                    keysA[sector] + accessBytes + keysB[sector]
+                } else {
+                    val offset = sector * 64 + blockInSector * 16
+                    dataBuf.copyOfRange(offset, offset + 16)
+                }
+            }
+            latestSnapmakerRawData = RawTagReadData(
+                uidHex   = uidHexSnap,
+                keyA0Hex = keysA[0].joinToString("") { "%02x".format(it) },
+                keyB0Hex = keysB[0].joinToString("") { "%02x".format(it) },
+                keyA1Hex = keysA[1].joinToString("") { "%02x".format(it) },
+                keyB1Hex = keysB[1].joinToString("") { "%02x".format(it) },
+                sectorKeys = (0 until 16).map { i ->
+                    Pair(keysA[i] as ByteArray?, keysB[i] as ByteArray?)
+                },
+                rawBlocks = rawBlocksSnap,
+                errors    = emptyList()
+            )
+
+            parseSnapmakerData(dataBuf, uid)
+        } catch (e: Exception) {
+            logDebug("Snapmaker read failed: ${e.message}")
+            null
+        } finally {
+            try { mifare.close() } catch (_: Exception) {}
+        }
+    }
+
+    /** 将 dataBuf 解析为 SnapmakerTagData（偏移量来自 M1 协议规范） */
+    private fun parseSnapmakerData(dataBuf: ByteArray, uid: ByteArray): SnapmakerTagData? {
+        if (dataBuf.size != 1024) return null
+
+        fun le16(offset: Int) = ((dataBuf[offset + 1].toInt() and 0xFF) shl 8) or (dataBuf[offset].toInt() and 0xFF)
+        fun readRgb(offset: Int) = ((dataBuf[offset].toInt() and 0xFF) shl 16) or
+                ((dataBuf[offset + 1].toInt() and 0xFF) shl 8) or
+                (dataBuf[offset + 2].toInt() and 0xFF)
+
+        // RSA 密钥版本: sector2 block2 bytes 8-9 → offset 168
+        val rsaKeyVer = le16(168)
+
+        // RSA 签名验证（可选，不影响数据展示）
+        val isOfficial = tryVerifySnapmakerSignature(dataBuf, rsaKeyVer)
+
+        val vendor = String(dataBuf, 16, 16, Charsets.US_ASCII).trimEnd('\u0000')        // sector0 block1
+        val manufacturer = String(dataBuf, 32, 16, Charsets.US_ASCII).trimEnd('\u0000') // sector0 block2
+
+        val mainTypeCode = le16(66)   // sector1 block0 bytes2-3
+        val subTypeCode  = le16(68)   // sector1 block0 bytes4-5
+        val colorNums    = dataBuf[72].toInt() and 0xFF                                 // sector1 block0 byte8
+
+        val rgb1 = readRgb(80); val rgb2 = readRgb(83); val rgb3 = readRgb(86)
+        val rgb4 = readRgb(89); val rgb5 = readRgb(92)
+
+        val diameter    = le16(128)  // sector2 block0 bytes0-1
+        val weight      = le16(130)  // sector2 block0 bytes2-3
+        val dryingTemp  = le16(144)  // sector2 block1 bytes0-1
+        val dryingTime  = le16(146)  // sector2 block1 bytes2-3
+        val hotendMax   = le16(148)  // sector2 block1 bytes4-5
+        val hotendMin   = le16(150)  // sector2 block1 bytes6-7
+        val bedTemp     = le16(154)  // sector2 block1 bytes10-11
+        val mfDate = String(dataBuf, 160, 8, Charsets.US_ASCII).trimEnd('\u0000')       // sector2 block2 bytes0-7
+
+        return SnapmakerTagData(
+            vendor       = vendor.ifBlank { "-" },
+            manufacturer = manufacturer.ifBlank { "-" },
+            mainType     = SNAPMAKER_MAIN_TYPE_MAP[mainTypeCode] ?: "Unknown($mainTypeCode)",
+            subType      = SNAPMAKER_SUB_TYPE_MAP[subTypeCode]  ?: "Unknown($subTypeCode)",
+            colorCount   = colorNums,
+            rgb1 = rgb1, rgb2 = rgb2, rgb3 = rgb3, rgb4 = rgb4, rgb5 = rgb5,
+            diameter     = diameter,
+            weight       = weight,
+            dryingTemp   = dryingTemp,
+            dryingTime   = dryingTime,
+            hotendMaxTemp = hotendMax,
+            hotendMinTemp = hotendMin,
+            bedTemp      = bedTemp,
+            mfDate       = mfDate.ifBlank { "-" },
+            isOfficial   = isOfficial,
+            uidHex       = uid.joinToString("") { "%02X".format(it) },
+            rsaKeyVersion = rsaKeyVer
+        )
+    }
+
+    /** 将 PKCS#1 PEM 转换为 Java PublicKey（动态构造 SubjectPublicKeyInfo 包装） */
+    private fun loadSnapmakerRsaPublicKey(pem: String): java.security.PublicKey? {
+        return try {
+            val base64 = pem
+                .replace("-----BEGIN RSA PUBLIC KEY-----", "")
+                .replace("-----END RSA PUBLIC KEY-----", "")
+                .replace("\\s+".toRegex(), "")
+            val pkcs1 = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+
+            fun derLen(n: Int): ByteArray = when {
+                n < 128 -> byteArrayOf(n.toByte())
+                n < 256 -> byteArrayOf(0x81.toByte(), n.toByte())
+                else    -> byteArrayOf(0x82.toByte(), (n shr 8).toByte(), (n and 0xFF).toByte())
+            }
+            val algId = byteArrayOf(
+                0x30, 0x0d,
+                0x06, 0x09, 0x2a, 0x86.toByte(), 0x48, 0x86.toByte(), 0xf7.toByte(), 0x0d, 0x01, 0x01, 0x01,
+                0x05, 0x00
+            )
+            val bsContent = byteArrayOf(0x00) + pkcs1
+            val bitStr    = byteArrayOf(0x03) + derLen(bsContent.size) + bsContent
+            val seqBody   = algId + bitStr
+            val spki      = byteArrayOf(0x30) + derLen(seqBody.size) + seqBody
+
+            java.security.KeyFactory.getInstance("RSA")
+                .generatePublic(java.security.spec.X509EncodedKeySpec(spki))
+        } catch (e: Exception) {
+            logDebug("Snapmaker: RSA key load failed: ${e.message}")
+            null
+        }
+    }
+
+    /** 验证 Snapmaker 标签的 RSA-PKCS1v15-SHA256 签名；验证失败不影响解析 */
+    private fun tryVerifySnapmakerSignature(dataBuf: ByteArray, keyVersion: Int): Boolean {
+        if (keyVersion < 0 || keyVersion >= SNAPMAKER_RSA_KEYS.size) return false
+        val pubKey = loadSnapmakerRsaPublicKey(SNAPMAKER_RSA_KEYS[keyVersion]) ?: return false
+        return try {
+            // 从 sector10-15 各取前 48 字节（3个数据块）拼成签名，取前 256 字节
+            val sigCollected = ByteArray(288)
+            for (i in 0 until 6) {
+                dataBuf.copyInto(sigCollected, i * 48, (10 + i) * 64, (10 + i) * 64 + 48)
+            }
+            val sig = java.security.Signature.getInstance("SHA256withRSA")
+            sig.initVerify(pubKey)
+            sig.update(dataBuf, 0, 640)
+            sig.verify(sigCollected.copyOf(256))
+        } catch (e: Exception) {
+            logDebug("Snapmaker: signature check failed: ${e.message}")
+            false
+        }
+    }
+
+    // ── End Snapmaker ─────────────────────────────────────────────────────────
 
     private fun authenticateSectorWithRetry(
         mifare: MifareClassic,
@@ -3782,9 +4552,10 @@ class MainActivity : ComponentActivity() {
 
     private fun readTag(tag: Tag): NfcUiState {
         // 第一阶段：仅做读卡，返回原始块数据，不做业务解析。
+        // 开启自动共享时强制读取全部扇区，确保上传数据完整。
         val rawResult = NfcTagReader.readRaw(
             tag = tag,
-            readAllSectors = readAllSectors,
+            readAllSectors = readAllSectors || autoShareTag,
             logger = ::logDebug,
             appendLog = { level, message -> LogCollector.append(applicationContext, level, message) }
         )
@@ -4277,6 +5048,23 @@ class FilamentDbHelper(context: Context) :
             )
             """.trimIndent()
         )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $SNAPMAKER_SHARE_TAGS_TABLE (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uid TEXT UNIQUE NOT NULL,
+                vendor TEXT,
+                manufacturer TEXT,
+                main_type INTEGER NOT NULL DEFAULT 0,
+                diameter INTEGER NOT NULL DEFAULT 0,
+                weight INTEGER NOT NULL DEFAULT 0,
+                rgb1 INTEGER NOT NULL DEFAULT 0,
+                mf_date TEXT,
+                raw_data TEXT,
+                copy_count INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent()
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -4443,6 +5231,23 @@ class FilamentDbHelper(context: Context) :
                 )
             """.trimIndent())
         }
+        if (oldVersion < 19) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS $SNAPMAKER_SHARE_TAGS_TABLE (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    uid TEXT UNIQUE NOT NULL,
+                    vendor TEXT,
+                    manufacturer TEXT,
+                    main_type INTEGER NOT NULL DEFAULT 0,
+                    diameter INTEGER NOT NULL DEFAULT 0,
+                    weight INTEGER NOT NULL DEFAULT 0,
+                    rgb1 INTEGER NOT NULL DEFAULT 0,
+                    mf_date TEXT,
+                    raw_data TEXT,
+                    copy_count INTEGER NOT NULL DEFAULT 0
+                )
+            """.trimIndent())
+        }
     }
 
     private fun addTrayColumn(db: SQLiteDatabase, column: String, type: String) {
@@ -4581,6 +5386,91 @@ class FilamentDbHelper(context: Context) :
 
     fun clearShareTagsTable(db: SQLiteDatabase): Int {
         return db.delete(SHARE_TAGS_TABLE, "1", null)
+    }
+
+    // --- snapmaker_share_tags 相关方法 ---
+
+    data class SnapmakerShareTagRow(
+        val id: Long,
+        val uid: String,
+        val vendor: String?,
+        val manufacturer: String?,
+        val mainType: Int,
+        val diameter: Int,
+        val weight: Int,
+        val rgb1: Int,
+        val mfDate: String?,
+        val rawData: String?,
+        val copyCount: Int
+    )
+
+    fun insertSnapmakerShareTag(
+        db: SQLiteDatabase,
+        uid: String,
+        vendor: String?,
+        manufacturer: String?,
+        mainType: Int,
+        diameter: Int,
+        weight: Int,
+        rgb1: Int,
+        mfDate: String?,
+        rawData: String?
+    ): Long {
+        val values = ContentValues().apply {
+            put("uid", uid)
+            if (!vendor.isNullOrBlank()) put("vendor", vendor)
+            if (!manufacturer.isNullOrBlank()) put("manufacturer", manufacturer)
+            put("main_type", mainType)
+            put("diameter", diameter)
+            put("weight", weight)
+            put("rgb1", rgb1)
+            if (!mfDate.isNullOrBlank()) put("mf_date", mfDate)
+            if (!rawData.isNullOrBlank()) put("raw_data", rawData)
+        }
+        return db.insertWithOnConflict(SNAPMAKER_SHARE_TAGS_TABLE, null, values, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
+    fun getAllSnapmakerShareTagRows(db: SQLiteDatabase): List<SnapmakerShareTagRow> {
+        val result = mutableListOf<SnapmakerShareTagRow>()
+        val cursor = db.query(
+            SNAPMAKER_SHARE_TAGS_TABLE,
+            arrayOf("id", "uid", "vendor", "manufacturer", "main_type", "diameter", "weight", "rgb1", "mf_date", "raw_data", "copy_count"),
+            null, null, null, null,
+            "vendor ASC, uid ASC"
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                result.add(SnapmakerShareTagRow(
+                    id = it.getLong(0),
+                    uid = it.getString(1) ?: "",
+                    vendor = it.getString(2),
+                    manufacturer = it.getString(3),
+                    mainType = it.getInt(4),
+                    diameter = it.getInt(5),
+                    weight = it.getInt(6),
+                    rgb1 = it.getInt(7),
+                    mfDate = it.getString(8),
+                    rawData = it.getString(9),
+                    copyCount = it.getInt(10)
+                ))
+            }
+        }
+        return result
+    }
+
+    fun getAllSnapmakerShareTagUids(db: SQLiteDatabase): List<String> {
+        val result = mutableListOf<String>()
+        val cursor = db.query(SNAPMAKER_SHARE_TAGS_TABLE, arrayOf("uid"), null, null, null, null, null)
+        cursor.use { while (it.moveToNext()) { result.add(it.getString(0) ?: "") } }
+        return result
+    }
+
+    fun incrementSnapmakerShareTagCopyCount(db: SQLiteDatabase, id: Long) {
+        db.execSQL("UPDATE $SNAPMAKER_SHARE_TAGS_TABLE SET copy_count = copy_count + 1 WHERE id = ?", arrayOf(id))
+    }
+
+    fun deleteSnapmakerShareTagByUid(db: SQLiteDatabase, uid: String) {
+        db.delete(SNAPMAKER_SHARE_TAGS_TABLE, "uid = ?", arrayOf(uid))
     }
 
     fun getMetaValue(db: SQLiteDatabase, key: String): String? {

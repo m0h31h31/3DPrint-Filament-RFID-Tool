@@ -43,7 +43,12 @@ import com.m0h31h31.bamburfidreader.ui.screens.DataScreen
 import com.m0h31h31.bamburfidreader.ui.screens.NdefWriteRequest
 import com.m0h31h31.bamburfidreader.ui.screens.WriteScreen
 import com.m0h31h31.bamburfidreader.ui.screens.CrealityScreen
+import com.m0h31h31.bamburfidreader.ui.screens.SnapmakerTagScreen
+import com.m0h31h31.bamburfidreader.SnapmakerShareTagItem
+import com.m0h31h31.bamburfidreader.CrealityMaterial
 import com.m0h31h31.bamburfidreader.CrealityTagData
+import com.m0h31h31.bamburfidreader.ReaderBrand
+import com.m0h31h31.bamburfidreader.SnapmakerTagData
 import com.m0h31h31.bamburfidreader.ui.theme.AppUiStyle
 import com.m0h31h31.bamburfidreader.ui.theme.ColorPalette
 import com.m0h31h31.bamburfidreader.ui.theme.LocalAppUiStyle
@@ -63,6 +68,7 @@ private val topDestinations = listOf(
     TopDestination("inventory", R.string.tab_inventory, R.drawable.kucun),
     TopDestination("data", R.string.tab_data, R.drawable.shuju),
     TopDestination("tag", R.string.tab_tag, R.drawable.bambu),
+    TopDestination("snapmaker", R.string.tab_snapmaker, R.drawable.bambu),
     TopDestination("creality", R.string.tab_creality, R.drawable.chuangxiang),
     TopDestination("misc", R.string.tab_misc, R.drawable.zaxiang)
 )
@@ -98,6 +104,8 @@ fun AppNavigation(
     onCrealityClearTagData: () -> Unit = {},
     inventoryEnabled: Boolean = false,
     onInventoryEnabledChange: (Boolean) -> Unit = {},
+    autoShareTag: Boolean = true,
+    onAutoShareTagChange: (Boolean) -> Unit = {},
     hideCopiedTags: Boolean = true,
     onHideCopiedTagsChange: (Boolean) -> Unit = {},
     dualTagMode: Boolean = false,
@@ -122,6 +130,17 @@ fun AppNavigation(
     miscStatusMessage: String,
     onExportTagPackage: () -> String,
     onSelectImportTagPackage: () -> String,
+    onSelectImportSnapmakerTagPackage: () -> String = { "" },
+    snapmakerTagEnabled: Boolean = false,
+    onSnapmakerTagEnabledChange: (Boolean) -> Unit = {},
+    snapmakerShareTagItems: List<SnapmakerShareTagItem> = emptyList(),
+    snapmakerShareLoading: Boolean = false,
+    snapmakerWriteStatusMessage: String = "",
+    snapmakerWriteInProgress: Boolean = false,
+    onSnapmakerTagScreenEnter: () -> Unit = {},
+    onStartWriteSnapmakerTag: (SnapmakerShareTagItem) -> Unit = {},
+    onDeleteSnapmakerTagItem: (SnapmakerShareTagItem) -> String = { "" },
+    onCancelSnapmakerWrite: () -> Unit = {},
     navigateToReader: Boolean = false,
     navigateToTag: Boolean = false,
     navigateToMisc: Boolean = false,
@@ -145,7 +164,13 @@ fun AppNavigation(
     cModifyRecoveryInfo: com.m0h31h31.bamburfidreader.CModifyRecoveryInfo? = null,
     onDismissCModifyRecovery: () -> Unit = {},
     onStartNdefWrite: (NdefWriteRequest) -> String,
-    onActiveRouteChange: (String) -> Unit = {}
+    onActiveRouteChange: (String) -> Unit = {},
+    readerBrand: ReaderBrand = ReaderBrand.BAMBU,
+    onReaderBrandChange: (ReaderBrand) -> Unit = {},
+    readerCrealityTagData: CrealityTagData? = null,
+    readerCrealityMaterial: CrealityMaterial? = null,
+    readerSnapmakerTagData: SnapmakerTagData? = null,
+    readerBrandStatus: String = ""
 ) {
     val resolvedUiStyle = LocalAppUiStyle.current
     val navController = rememberNavController()
@@ -155,11 +180,12 @@ fun AppNavigation(
     LaunchedEffect(currentRoute) {
         onActiveRouteChange(currentRoute ?: "reader")
     }
-    val visibleDestinations = remember(inventoryEnabled, crealityEnabled) {
+    val visibleDestinations = remember(inventoryEnabled, crealityEnabled, snapmakerTagEnabled) {
         topDestinations.filter { dest ->
             when (dest.route) {
                 "inventory", "data" -> inventoryEnabled
                 "creality" -> crealityEnabled
+                "snapmaker" -> snapmakerTagEnabled
                 else -> true
             }
         }
@@ -179,6 +205,19 @@ fun AppNavigation(
                 popUpTo(navController.graph.findStartDestination().id) { saveState = false }
                 launchSingleTop = true
             }
+        }
+    }
+    LaunchedEffect(snapmakerTagEnabled) {
+        if (!snapmakerTagEnabled && currentRoute == "snapmaker") {
+            navController.navigate("reader") {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = false }
+                launchSingleTop = true
+            }
+        }
+    }
+    LaunchedEffect(currentRoute, snapmakerWriteInProgress) {
+        if (currentRoute != "snapmaker" && snapmakerWriteInProgress) {
+            onCancelSnapmakerWrite()
         }
     }
     LaunchedEffect(currentRoute, writeInProgress) {
@@ -335,7 +374,13 @@ fun AppNavigation(
                     onRemainingChange = { trayUid, percent, grams ->
                         onRemainingChange(trayUid, percent, grams)
                     },
-                    onNotesChange = onNotesChange
+                    onNotesChange = onNotesChange,
+                    readerBrand = readerBrand,
+                    onBrandChange = onReaderBrandChange,
+                    readerCrealityTagData = readerCrealityTagData,
+                    readerCrealityMaterial = readerCrealityMaterial,
+                    readerSnapmakerTagData = readerSnapmakerTagData,
+                    readerBrandStatus = readerBrandStatus
                 )
             }
             composable("inventory") {
@@ -371,6 +416,22 @@ fun AppNavigation(
                     onRefresh = onTagScreenEnter
                 )
             }
+            composable("snapmaker") {
+                LaunchedEffect(snapmakerShareTagItems.size) {
+                    if (snapmakerShareTagItems.isEmpty()) onSnapmakerTagScreenEnter()
+                }
+                SnapmakerTagScreen(
+                    items = snapmakerShareTagItems,
+                    loading = snapmakerShareLoading,
+                    writeStatusMessage = snapmakerWriteStatusMessage,
+                    writeInProgress = snapmakerWriteInProgress,
+                    tagViewMode = tagViewMode,
+                    onStartWrite = onStartWriteSnapmakerTag,
+                    onDelete = onDeleteSnapmakerTagItem,
+                    onCancelWrite = onCancelSnapmakerWrite,
+                    onRefresh = onSnapmakerTagScreenEnter
+                )
+            }
             composable("creality") {
                 CrealityScreen(
                     dbHelper = dbHelper,
@@ -393,6 +454,8 @@ fun AppNavigation(
                                 onCrealityEnabledChange = onCrealityEnabledChange,
                                 inventoryEnabled = inventoryEnabled,
                                 onInventoryEnabledChange = onInventoryEnabledChange,
+                                autoShareTag = autoShareTag,
+                                onAutoShareTagChange = onAutoShareTagChange,
                                 hideCopiedTags = hideCopiedTags,
                                 onHideCopiedTagsChange = onHideCopiedTagsChange,
                                 dualTagMode = dualTagMode,
@@ -413,6 +476,9 @@ fun AppNavigation(
                                 miscStatusMessage = miscStatusMessage,
                                 onExportTagPackage = onExportTagPackage,
                                 onSelectImportTagPackage = onSelectImportTagPackage,
+                            onSelectImportSnapmakerTagPackage = onSelectImportSnapmakerTagPackage,
+                            snapmakerTagEnabled = snapmakerTagEnabled,
+                            onSnapmakerTagEnabledChange = onSnapmakerTagEnabledChange,
                                 appConfigMessage = appConfigMessage,
                                 appConfigAdMessage = appConfigAdMessage,
                                 boostLink = appConfigBoostLink,

@@ -11,6 +11,17 @@ object AnalyticsReporter {
     private const val KEY_INSTALL_ID = "install_id"
     private const val KEY_INSTALL_REPORTED = "install_reported"
 
+    /**
+     * 获取本设备的稳定 UUID。首次调用时生成并持久化，后续调用返回同一值。
+     * 卸载重装后会重新生成。
+     */
+    fun getInstallId(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_INSTALL_ID, null) ?: UUID.randomUUID().toString().also {
+            prefs.edit().putString(KEY_INSTALL_ID, it).apply()
+        }
+    }
+
     suspend fun reportInstallAndLaunch(context: Context) {
         val endpoint = ConfigManager.getAppConfigUserCountEndpoint(context).value
         if (endpoint.isBlank()) return
@@ -21,9 +32,7 @@ object AnalyticsReporter {
         }
 
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val installId = prefs.getString(KEY_INSTALL_ID, null) ?: UUID.randomUUID().toString().also {
-            prefs.edit().putString(KEY_INSTALL_ID, it).apply()
-        }
+        val installId = getInstallId(context)
 
         val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         val commonPayload = JSONObject().apply {

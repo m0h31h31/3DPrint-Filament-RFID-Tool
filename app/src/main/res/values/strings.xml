@@ -19,7 +19,7 @@
     <string name="tab_inventory">库存</string>
     <string name="tab_data">数据</string>
     <string name="tab_write">写入</string>
-    <string name="tab_tag">复制</string>
+    <string name="tab_tag">拓竹</string>
     <string name="tab_misc">配置</string>
 
     <string name="voice_status_prefix">语音 %1$s</string>
@@ -188,6 +188,8 @@
     <string name="misc_force_overwrite_import">强制覆盖导入标签</string>
     <string name="config_inventory_feature">库存与数据功能</string>
     <string name="config_inventory_feature_desc">开启后显示库存和数据页面</string>
+    <string name="config_auto_share_tag">自动共享标签</string>
+    <string name="config_auto_share_tag_desc">读取拓竹/快造完整数据后自动上传到共享服务器</string>
     <string name="config_hide_copied_tags">隐藏已复制标签</string>
     <string name="config_hide_copied_tags_desc">隐藏已成功复制的标签</string>
     <string name="config_dual_tag_mode">双标签模式</string>
@@ -267,6 +269,15 @@
     <string name="tab_creality">创想</string>
     <string name="config_creality_feature">创想三维 RFID</string>
     <string name="config_creality_feature_desc">开启创想三维耗材 RFID 读写页面</string>
+    <string name="tab_snapmaker">快造</string>
+    <string name="config_snapmaker_feature">快造U1 RFID</string>
+    <string name="config_snapmaker_feature_desc">开启快造U1耗材标签复制页面</string>
+    <string name="misc_import_bambu_tag_package">导入拓竹标签包</string>
+    <string name="misc_import_snapmaker_tag_package">导入快造U1标签包</string>
+    <string name="misc_import_tag_type_title">选择导入类型</string>
+    <string name="snapmaker_tag_screen_hint">选择标签后贴卡写入</string>
+    <string name="snapmaker_diameter_label">线径</string>
+    <string name="snapmaker_weight_label">重量</string>
     <string name="creality_scan_hint">贴上标签自动读取</string>
     <string name="creality_write_scan_hint">填写耗材信息后贴上标签写入</string>
     <string name="creality_label_brand">品牌</string>

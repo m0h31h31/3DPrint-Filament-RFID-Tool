@@ -173,6 +173,9 @@ fun MiscScreen(
     miscStatusMessage: String = "",
     onExportTagPackage: () -> String = { "" },
     onSelectImportTagPackage: () -> String = { "" },
+    onSelectImportSnapmakerTagPackage: () -> String = { "" },
+    snapmakerTagEnabled: Boolean = false,
+    onSnapmakerTagEnabledChange: (Boolean) -> Unit = {},
     selfTagCount: Int = 0,
     appConfigMessage: String = "",
     appConfigAdMessage: String = "",
@@ -200,6 +203,8 @@ fun MiscScreen(
     onCrealityEnabledChange: (Boolean) -> Unit = {},
     inventoryEnabled: Boolean = false,
     onInventoryEnabledChange: (Boolean) -> Unit = {},
+    autoShareTag: Boolean = true,
+    onAutoShareTagChange: (Boolean) -> Unit = {},
     hideCopiedTags: Boolean = true,
     onHideCopiedTagsChange: (Boolean) -> Unit = {},
     dualTagMode: Boolean = false,
@@ -254,6 +259,7 @@ fun MiscScreen(
     var showImportDatabaseConfirmDialog by remember { mutableStateOf(false) }
     var showClearSelfTagsConfirmDialog by remember { mutableStateOf(false) }
     var showClearShareTagsConfirmDialog by remember { mutableStateOf(false) }
+    var showImportTypeDialog by remember { mutableStateOf(false) }
     var versionTapCount by rememberSaveable { mutableStateOf(0) }
     var versionEggVisible by remember { mutableStateOf(false) }
     var versionEggNonce by remember { mutableStateOf(0) }
@@ -737,6 +743,28 @@ fun MiscScreen(
                                 modifier = Modifier.weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
+                                Text(text = stringResource(R.string.config_snapmaker_feature))
+                                Text(
+                                    text = stringResource(R.string.config_snapmaker_feature_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            AppSwitch(
+                                checked = snapmakerTagEnabled,
+                                onCheckedChange = { onSnapmakerTagEnabledChange(it) }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
                                 Text(text = stringResource(R.string.config_inventory_feature))
                                 Text(
                                     text = stringResource(R.string.config_inventory_feature_desc),
@@ -747,6 +775,28 @@ fun MiscScreen(
                             AppSwitch(
                                 checked = inventoryEnabled,
                                 onCheckedChange = { onInventoryEnabledChange(it) }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(text = stringResource(R.string.config_auto_share_tag))
+                                Text(
+                                    text = stringResource(R.string.config_auto_share_tag_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            AppSwitch(
+                                checked = autoShareTag,
+                                onCheckedChange = { onAutoShareTagChange(it) }
                             )
                         }
 
@@ -944,7 +994,43 @@ fun MiscScreen(
                     )
                 }
 
-
+                if (showImportTypeDialog) {
+                    val importingTagMsg = stringResource(R.string.misc_importing_tag_package)
+                    AlertDialog(
+                        onDismissRequest = { showImportTypeDialog = false },
+                        title = { Text(text = stringResource(R.string.misc_import_tag_type_title)) },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                NeuButton(
+                                    text = stringResource(R.string.misc_import_bambu_tag_package),
+                                    onClick = {
+                                        showImportTypeDialog = false
+                                        message = importingTagMsg
+                                        val result = onSelectImportTagPackage()
+                                        if (result.isNotBlank()) message = result
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                NeuButton(
+                                    text = stringResource(R.string.misc_import_snapmaker_tag_package),
+                                    onClick = {
+                                        showImportTypeDialog = false
+                                        message = importingTagMsg
+                                        val result = onSelectImportSnapmakerTagPackage()
+                                        if (result.isNotBlank()) message = result
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { showImportTypeDialog = false }) {
+                                Text(text = stringResource(R.string.action_cancel))
+                            }
+                        }
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1009,14 +1095,9 @@ fun MiscScreen(
                         onClick = { message = onExportTagPackage() },
                         modifier = Modifier.weight(1f)
                     )
-                    val importingTagMsg = stringResource(R.string.misc_importing_tag_package)
                     NeuButton(
                         text = stringResource(R.string.misc_import_tag_package),
-                        onClick = {
-                            message = importingTagMsg
-                            val result = onSelectImportTagPackage()
-                            if (result.isNotBlank()) message = result
-                        },
+                        onClick = { showImportTypeDialog = true },
                         modifier = Modifier.weight(1f)
                     )
                 }
