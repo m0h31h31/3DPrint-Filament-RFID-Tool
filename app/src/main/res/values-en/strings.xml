@@ -302,4 +302,23 @@
     <string name="creality_page_subtitle">This page is designed exclusively for Creality 3D filament tags. Only tag reading and writing are supported — fully independent from inventory, data, and other features.</string>
     <string name="creality_read_success">Read successful</string>
     <string name="creality_read_failed">No Creality tag detected</string>
+
+    <string name="anomaly_report_button">Report Anomaly</string>
+    <string name="anomaly_dialog_title">Report Anomalous Tag</string>
+    <string name="anomaly_dialog_message">This filament data fails AMS recognition, or if the AMS reports it cannot identify this tag, please submit a report. Reported tags will be marked as anomalous in the shared library. Please report honestly — do not submit false reports.</string>
+    <string name="anomaly_dialog_confirm">Submit Report</string>
+    <string name="anomaly_dialog_cancel">Cancel</string>
+    <string name="anomaly_report_success">Report submitted</string>
+    <string name="anomaly_report_fail">Report failed, please try again</string>
+    <string name="anomaly_copy_warning_title">Warning</string>
+    <string name="anomaly_copy_warning_message">This tag may be banned by AMS. Copy with caution.</string>
+    <string name="misc_device_id_label">Device ID</string>
+    <string name="misc_nickname_label">Nickname</string>
+    <string name="misc_nickname_hint">Enter nickname (optional)</string>
+    <string name="misc_nickname_save">Save</string>
+    <string name="misc_nickname_saved">Nickname saved</string>
+    <string name="misc_nickname_save_failed">Failed to save nickname, please try again later</string>
+    <string name="auto_share_disable_confirm_title">Confirm Disable</string>
+    <string name="auto_share_disable_confirm_message">After successfully sharing tags, you can enjoy shared data from others. Without sharing, you cannot access others\' shared data. Are you sure you want to disable it?</string>
+    <string name="action_confirm">Confirm</string>
 </resources>

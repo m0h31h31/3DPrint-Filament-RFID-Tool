@@ -174,7 +174,9 @@ fun AppNavigation(
     readerCrealityTagData: CrealityTagData? = null,
     readerCrealityMaterial: CrealityMaterial? = null,
     readerSnapmakerTagData: SnapmakerTagData? = null,
-    readerBrandStatus: String = ""
+    readerBrandStatus: String = "",
+    anomalyUids: Set<String> = emptySet(),
+    onReportAnomaly: (trayUid: String, cardUid: String) -> Unit = { _, _ -> },
 ) {
     val resolvedUiStyle = LocalAppUiStyle.current
     val navController = rememberNavController()
@@ -393,7 +395,8 @@ fun AppNavigation(
                     readerCrealityTagData = readerCrealityTagData,
                     readerCrealityMaterial = readerCrealityMaterial,
                     readerSnapmakerTagData = readerSnapmakerTagData,
-                    readerBrandStatus = readerBrandStatus
+                    readerBrandStatus = readerBrandStatus,
+                    onReportAnomaly = onReportAnomaly
                 )
             }
             composable("inventory") {
@@ -426,7 +429,8 @@ fun AppNavigation(
                     cModifyInProgress = cModifyInProgress,
                     cModifyRecoveryInfo = cModifyRecoveryInfo,
                     onDismissCModifyRecovery = onDismissCModifyRecovery,
-                    onRefresh = onTagScreenEnter
+                    onRefresh = onTagScreenEnter,
+                    anomalyUids = anomalyUids
                 )
             }
             composable("snapmaker") {

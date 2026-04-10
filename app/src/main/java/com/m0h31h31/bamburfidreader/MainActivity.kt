@@ -87,7 +87,7 @@ private const val LOG_TAG = "BambuRfidReader"
 private const val FILAMENT_JSON_NAME = "filaments_color_codes.json"
 private const val FILAMENTS_TYPE_MAPPING_FILE = "filaments_type_mapping.json"
 private const val FILAMENT_DB_NAME = "filaments.db"
-private const val FILAMENT_DB_VERSION = 19
+private const val FILAMENT_DB_VERSION = 20
 private const val CREALITY_MATERIAL_FILE = "creality_material_list.json"
 private const val CREALITY_MATERIAL_TABLE = "creality_materials"
 private const val FILAMENT_TABLE = "filaments"
@@ -98,6 +98,7 @@ private const val FILAMENT_META_KEY_LOCALE = "filaments_locale"
 private const val TRAY_UID_TABLE = "filament_inventory"
 private const val SHARE_TAGS_TABLE = "share_tags"
 private const val SNAPMAKER_SHARE_TAGS_TABLE = "snapmaker_share_tags"
+private const val ANOMALY_UIDS_TABLE = "anomaly_uids"
 private const val DEFAULT_REMAINING_PERCENT = 100
 private const val LOG_DIR_NAME = "logs"
 private const val LOG_FILE_NAME = "bambu_rfid.log"
@@ -746,6 +747,7 @@ class MainActivity : ComponentActivity() {
     private var shareRefreshStatusMessage by mutableStateOf("")
     private var shareRefreshStatusClearJob: Job? = null
     private var miscStatusMessage by mutableStateOf("")
+    private var anomalyUids by mutableStateOf<Set<String>>(emptySet())
     private var writeToolStatusMessage by mutableStateOf("")
     private var selfTagCount by mutableStateOf(0)
     private var debugInfoDialog: android.app.AlertDialog? = null
@@ -1222,7 +1224,10 @@ class MainActivity : ComponentActivity() {
         filamentDbHelper?.let {
             syncFilamentDatabase(this, it)
             syncCrealityMaterialDatabase(this, it)
+            // 加载本地缓存的异常UID，然后后台同步最新列表
+            anomalyUids = it.getAnomalyUids(it.readableDatabase)
         }
+        syncAnomalyUidsAsync()
         ensureShareDirectory()
         refreshSelfTagCount()
         lifecycleScope.launch(Dispatchers.IO) {
@@ -1453,8 +1458,15 @@ class MainActivity : ComponentActivity() {
                     writeInProgress = pendingWriteItem != null || pendingVerifyItem != null,
                     cModifyInProgress = pendingCModifyItem != null,
                     formatInProgress = pendingClearFuid,
+                    anomalyUids = anomalyUids,
+                    onReportAnomaly = { trayUid, cardUid ->
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            com.m0h31h31.bamburfidreader.utils.AnalyticsReporter.reportAnomaly(applicationContext, trayUid, cardUid)
+                        }
+                    },
                     onTagScreenEnter = {
                         refreshShareTagItemsAsync()
+                        syncAnomalyUidsAsync()
                     },
                     onStartWriteTag = { item ->
                         enqueueWriteTask(item)
@@ -2925,6 +2937,29 @@ class MainActivity : ComponentActivity() {
             }
         }
         return true
+    }
+
+    private fun syncAnomalyUidsAsync() {
+        val dbHelper = filamentDbHelper ?: return
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val uids = com.m0h31h31.bamburfidreader.utils.AnalyticsReporter.fetchAnomalyUids(applicationContext)
+                if (uids != null) {
+                    dbHelper.saveAnomalyUids(dbHelper.writableDatabase, uids)
+                    withContext(Dispatchers.Main) {
+                        anomalyUids = uids
+                    }
+                } else {
+                    // 拉取失败时，用本地缓存
+                    val cached = dbHelper.getAnomalyUids(dbHelper.readableDatabase)
+                    withContext(Dispatchers.Main) {
+                        anomalyUids = cached
+                    }
+                }
+            } catch (_: Exception) {
+                // 静默失败，不影响主流程
+            }
+        }
     }
 
     private fun scheduleClearShareRefreshStatusMessage() {
@@ -5300,6 +5335,14 @@ class FilamentDbHelper(context: Context) :
             )
             """.trimIndent()
         )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $ANOMALY_UIDS_TABLE (
+                uid TEXT PRIMARY KEY NOT NULL,
+                synced_at INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -5480,6 +5523,14 @@ class FilamentDbHelper(context: Context) :
                     mf_date TEXT,
                     raw_data TEXT,
                     copy_count INTEGER NOT NULL DEFAULT 0
+                )
+            """.trimIndent())
+        }
+        if (oldVersion < 20) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS $ANOMALY_UIDS_TABLE (
+                    uid TEXT PRIMARY KEY NOT NULL,
+                    synced_at INTEGER NOT NULL
                 )
             """.trimIndent())
         }
@@ -5706,6 +5757,37 @@ class FilamentDbHelper(context: Context) :
 
     fun deleteSnapmakerShareTagByUid(db: SQLiteDatabase, uid: String) {
         db.delete(SNAPMAKER_SHARE_TAGS_TABLE, "uid = ?", arrayOf(uid))
+    }
+
+    // --- anomaly_uids 相关方法 ---
+
+    fun saveAnomalyUids(db: SQLiteDatabase, uids: Collection<String>) {
+        db.beginTransaction()
+        try {
+            db.delete(ANOMALY_UIDS_TABLE, null, null)
+            val now = System.currentTimeMillis()
+            for (uid in uids) {
+                val cv = ContentValues()
+                cv.put("uid", uid.lowercase().trim())
+                cv.put("synced_at", now)
+                db.insertWithOnConflict(ANOMALY_UIDS_TABLE, null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun getAnomalyUids(db: SQLiteDatabase): Set<String> {
+        val result = mutableSetOf<String>()
+        val cursor = db.query(ANOMALY_UIDS_TABLE, arrayOf("uid"), null, null, null, null, null)
+        cursor.use {
+            while (it.moveToNext()) {
+                val uid = it.getString(0)
+                if (!uid.isNullOrBlank()) result.add(uid)
+            }
+        }
+        return result
     }
 
     fun getMetaValue(db: SQLiteDatabase, key: String): String? {

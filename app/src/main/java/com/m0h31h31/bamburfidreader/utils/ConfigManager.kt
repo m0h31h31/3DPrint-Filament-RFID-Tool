@@ -19,6 +19,9 @@ object ConfigManager {
         "bambulab://bbl/design/model/detail?design_id=2020787&instance_id=2253290&appSharePlatform=copy"
     private const val DEFAULT_USER_COUNT_ENDPOINT = "https://brr.jacki.cn/events"
     private const val DEFAULT_TAG_SHARE_ENDPOINT = "https://brr.jacki.cn/api/tags"
+    private const val DEFAULT_ANOMALY_REPORT_ENDPOINT = "https://brr.jacki.cn/api/anomaly"
+    private const val DEFAULT_ANOMALY_UIDS_ENDPOINT = "https://brr.jacki.cn/api/anomaly/uids"
+    private const val DEFAULT_NICKNAME_ENDPOINT = "https://brr.jacki.cn/api/nickname"
 
     // 文件路径
     private const val FILAMENTS_COLOR_CODES_FILE = "filaments_color_codes.json"
@@ -299,6 +302,45 @@ object ConfigManager {
             }
         } catch (e: Exception) {
             com.m0h31h31.bamburfidreader.logDebug("Error parsing AppConfig userCountEndpoint: ${e.message}")
+            null
+        }) ?: defaultValue
+    }
+
+    fun getAnomalyReportEndpoint(context: Context): AppLinkConfig {
+        val defaultValue = AppLinkConfig(type = "url", value = DEFAULT_ANOMALY_REPORT_ENDPOINT)
+        val configContent = getLocalConfig(context, APP_CONFIG_FILE) ?: return defaultValue
+        return (try {
+            val json = JSONObject(configContent)
+            parseLinkConfig(json, "anomalyReportEndpoint", null)?.takeIf {
+                it.type.equals("url", ignoreCase = true) && it.value.isNotBlank()
+            }
+        } catch (e: Exception) {
+            null
+        }) ?: defaultValue
+    }
+
+    fun getAnomalyUidsEndpoint(context: Context): AppLinkConfig {
+        val defaultValue = AppLinkConfig(type = "url", value = DEFAULT_ANOMALY_UIDS_ENDPOINT)
+        val configContent = getLocalConfig(context, APP_CONFIG_FILE) ?: return defaultValue
+        return (try {
+            val json = JSONObject(configContent)
+            parseLinkConfig(json, "anomalyUidsEndpoint", null)?.takeIf {
+                it.type.equals("url", ignoreCase = true) && it.value.isNotBlank()
+            }
+        } catch (e: Exception) {
+            null
+        }) ?: defaultValue
+    }
+
+    fun getNicknameEndpoint(context: Context): AppLinkConfig {
+        val defaultValue = AppLinkConfig(type = "url", value = DEFAULT_NICKNAME_ENDPOINT)
+        val configContent = getLocalConfig(context, APP_CONFIG_FILE) ?: return defaultValue
+        return (try {
+            val json = JSONObject(configContent)
+            parseLinkConfig(json, "nicknameEndpoint", null)?.takeIf {
+                it.type.equals("url", ignoreCase = true) && it.value.isNotBlank()
+            }
+        } catch (e: Exception) {
             null
         }) ?: defaultValue
     }

@@ -190,7 +190,8 @@ private fun TagListItem(
     unknownText: String,
     unknownColorText: String,
     unknownColorIdText: String,
-    uiStyle: AppUiStyle
+    uiStyle: AppUiStyle,
+    isAnomalous: Boolean = false
 ) {
     val selectedFillColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
     val selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.26f)
@@ -224,10 +225,15 @@ private fun TagListItem(
             shape = tagItemShape,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
         ) {
+            val anomalyBorderColor = Color(0xFFD32F2F)
             Row(
                 modifier = Modifier.fillMaxWidth().clip(tagItemShape)
                     .background(if (selected) selectedFillColor else Color.Transparent)
-                    .border(if (selected) 1.dp else 0.dp, if (selected) selectedBorderColor else Color.Transparent, tagItemShape)
+                    .border(
+                        width = when { isAnomalous -> 2.dp; selected -> 1.dp; else -> 0.dp },
+                        color = when { isAnomalous -> anomalyBorderColor; selected -> selectedBorderColor; else -> Color.Transparent },
+                        shape = tagItemShape
+                    )
                     .padding(horizontal = 10.dp, vertical = 7.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -340,7 +346,8 @@ private fun UidSelectionDialog(
     unknownColorText: String,
     unknownColorIdText: String,
     onSelect: (ShareTagItem) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    anomalyUids: Set<String> = emptySet()
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -389,6 +396,7 @@ private fun UidSelectionDialog(
                 val sortedItems = remember(group.items) {
                     group.items.sortedByDescending { it.productionDate.ifBlank { "" } }
                 }
+                var pendingAnomalyItem by remember { mutableStateOf<ShareTagItem?>(null) }
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -402,16 +410,33 @@ private fun UidSelectionDialog(
                     ) {
                         sortedItems.forEach { item ->
                             val selected = item.relativePath == selectedRelativePath
-                            val chipBg = if (selected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.surfaceVariant
-                            val chipText = if (selected) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
+                            val isItemAnomalous = item.sourceUid.lowercase() in anomalyUids ||
+                                item.trayUid.lowercase() in anomalyUids
+                            val chipBg = when {
+                                selected -> MaterialTheme.colorScheme.primary
+                                isItemAnomalous -> Color(0xFFD32F2F).copy(alpha = 0.15f)
+                                else -> MaterialTheme.colorScheme.surfaceVariant
+                            }
+                            val chipText = when {
+                                selected -> MaterialTheme.colorScheme.onPrimary
+                                isItemAnomalous -> Color(0xFFD32F2F)
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                            val chipBorder = if (isItemAnomalous && !selected)
+                                2.dp else 0.dp
+                            val chipBorderColor = if (isItemAnomalous && !selected)
+                                Color(0xFFD32F2F) else Color.Transparent
                             Box(
                                 modifier = Modifier
                                     .background(chipBg, RoundedCornerShape(6.dp))
+                                    .border(chipBorder, chipBorderColor, RoundedCornerShape(6.dp))
                                     .clickable {
-                                        onSelect(item)
-                                        onDismiss()
+                                        if (isItemAnomalous) {
+                                            pendingAnomalyItem = item
+                                        } else {
+                                            onSelect(item)
+                                            onDismiss()
+                                        }
                                     }
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
@@ -435,6 +460,26 @@ private fun UidSelectionDialog(
                             }
                         }
                     }
+                }
+                val anomalyPendingTarget = pendingAnomalyItem
+                if (anomalyPendingTarget != null) {
+                    AlertDialog(
+                        onDismissRequest = { pendingAnomalyItem = null },
+                        title = { Text(stringResource(R.string.anomaly_copy_warning_title)) },
+                        text = { Text(stringResource(R.string.anomaly_copy_warning_message)) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                onSelect(anomalyPendingTarget)
+                                pendingAnomalyItem = null
+                                onDismiss()
+                            }) { Text("继续") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingAnomalyItem = null }) {
+                                Text(stringResource(R.string.action_cancel))
+                            }
+                        }
+                    )
                 }
 
                 // Close button
@@ -460,7 +505,8 @@ private fun CategoryView(
     onSelect: (ShareTagItem) -> Unit,
     unknownText: String,
     unknownColorText: String,
-    unknownColorIdText: String
+    unknownColorIdText: String,
+    anomalyUids: Set<String> = emptySet()
 ) {
     val orderedCategories = remember(categories, categoryOrder) {
         val catMap = categories.associateBy { it.materialType }
@@ -575,7 +621,8 @@ private fun CategoryView(
             unknownColorText = unknownColorText,
             unknownColorIdText = unknownColorIdText,
             onSelect = onSelect,
-            onDismiss = { openDialog = null }
+            onDismiss = { openDialog = null },
+            anomalyUids = anomalyUids
         )
     }
 }
@@ -733,6 +780,7 @@ fun TagScreen(
     cModifyRecoveryInfo: com.m0h31h31.bamburfidreader.CModifyRecoveryInfo? = null,
     onDismissCModifyRecovery: () -> Unit = {},
     onRefresh: () -> Unit = {},
+    anomalyUids: Set<String> = emptySet(),
     modifier: Modifier = Modifier
 ) {
     val uiStyle = LocalAppUiStyle.current
@@ -741,6 +789,7 @@ fun TagScreen(
     var selectedFileName by remember { mutableStateOf<String?>(null) }
     var hintMessage by remember { mutableStateOf("") }
     var pendingDeleteItem by remember { mutableStateOf<ShareTagItem?>(null) }
+    var pendingAnomalyWriteItem by remember { mutableStateOf<ShareTagItem?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
     var colorFilterHex by remember { mutableStateOf<String?>(null) }
     var cameraBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -916,7 +965,8 @@ fun TagScreen(
                             onSelect = { item -> selectedFileName = item.relativePath },
                             unknownText = unknownText,
                             unknownColorText = unknownColorText,
-                            unknownColorIdText = unknownColorIdText
+                            unknownColorIdText = unknownColorIdText,
+                            anomalyUids = anomalyUids
                         )
                     } else {
                         LazyColumn(
@@ -932,7 +982,9 @@ fun TagScreen(
                                     unknownText = unknownText,
                                     unknownColorText = unknownColorText,
                                     unknownColorIdText = unknownColorIdText,
-                                    uiStyle = uiStyle
+                                    uiStyle = uiStyle,
+                                    isAnomalous = item.sourceUid.lowercase() in anomalyUids ||
+                                        item.trayUid.lowercase() in anomalyUids
                                 )
                             }
                         }
@@ -1035,6 +1087,25 @@ fun TagScreen(
                     }
                 )
             }
+            val anomalyWriteTarget = pendingAnomalyWriteItem
+            if (anomalyWriteTarget != null) {
+                AlertDialog(
+                    onDismissRequest = { pendingAnomalyWriteItem = null },
+                    title = { Text(stringResource(R.string.anomaly_copy_warning_title)) },
+                    text = { Text(stringResource(R.string.anomaly_copy_warning_message)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            onStartWrite(anomalyWriteTarget)
+                            pendingAnomalyWriteItem = null
+                        }) { Text("继续写入") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingAnomalyWriteItem = null }) {
+                            Text(stringResource(R.string.action_cancel))
+                        }
+                    }
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1049,7 +1120,16 @@ fun TagScreen(
                             onCancelWrite()
                         } else {
                             val item = selectedItem
-                            if (item != null) onStartWrite(item) else hintMessage = selectOneFirstText
+                            if (item != null) {
+                                if (item.sourceUid.lowercase() in anomalyUids ||
+                                    item.trayUid.lowercase() in anomalyUids) {
+                                    pendingAnomalyWriteItem = item
+                                } else {
+                                    onStartWrite(item)
+                                }
+                            } else {
+                                hintMessage = selectOneFirstText
+                            }
                         }
                     },
                     enabled = writeInProgress || (!cModifyInProgress && selectedItem != null),

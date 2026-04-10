@@ -92,6 +92,36 @@ object NetworkUtils {
         }
     }
 
+    suspend fun getJson(
+        urlString: String,
+        headers: Map<String, String> = emptyMap()
+    ): JSONObject? {
+        return withContext(Dispatchers.IO) {
+            val url = URL(urlString)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.apply {
+                connectTimeout = TIMEOUT_MS
+                readTimeout = TIMEOUT_MS
+                requestMethod = "GET"
+                setRequestProperty("Accept", "application/json")
+                headers.forEach { (key, value) ->
+                    if (value.isNotBlank()) setRequestProperty(key, value)
+                }
+            }
+            try {
+                val code = connection.responseCode
+                if (code !in 200..299) return@withContext null
+                val body = connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                JSONObject(body)
+            } catch (e: Exception) {
+                com.m0h31h31.bamburfidreader.logDebug("Failed to GET JSON from $urlString: ${e.message}")
+                null
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
     suspend fun postJson(
         urlString: String,
         payload: JSONObject,

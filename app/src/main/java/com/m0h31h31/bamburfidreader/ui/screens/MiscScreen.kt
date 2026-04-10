@@ -69,8 +69,12 @@ import com.m0h31h31.bamburfidreader.ui.theme.AppUiStyle
 import com.m0h31h31.bamburfidreader.ui.theme.ColorPalette
 import com.m0h31h31.bamburfidreader.ui.theme.LocalAppUiStyle
 import com.m0h31h31.bamburfidreader.ui.theme.ThemeMode
+import com.m0h31h31.bamburfidreader.utils.AnalyticsReporter
 import com.m0h31h31.bamburfidreader.utils.ConfigManager
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.OutlinedTextField
 
 private enum class StatusTone {
     SUCCESS,
@@ -82,6 +86,7 @@ private enum class StatusTone {
 private const val MISC_PREFS = "misc_screen_prefs"
 private const val KEY_NOTICE_EXPANDED = "notice_expanded"
 private const val KEY_AD_EXPANDED = "ad_expanded"
+private const val KEY_NICKNAME = "user_nickname"
 
 private fun resolveStatusTone(message: String): StatusTone {
     val text = message.lowercase()
@@ -264,6 +269,12 @@ fun MiscScreen(
     var showClearSelfTagsConfirmDialog by remember { mutableStateOf(false) }
     var showClearShareTagsConfirmDialog by remember { mutableStateOf(false) }
     var showImportTypeDialog by remember { mutableStateOf(false) }
+    var showAutoShareDisableConfirm by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val installId = remember(context) { AnalyticsReporter.getInstallId(context) }
+    var nickname by remember {
+        mutableStateOf(miscPrefs.getString(KEY_NICKNAME, "").orEmpty())
+    }
     var versionTapCount by rememberSaveable { mutableStateOf(0) }
     var versionEggVisible by remember { mutableStateOf(false) }
     var versionEggNonce by remember { mutableStateOf(0) }
@@ -844,7 +855,13 @@ fun MiscScreen(
                             }
                             AppSwitch(
                                 checked = autoShareTag,
-                                onCheckedChange = { onAutoShareTagChange(it) }
+                                onCheckedChange = {
+                                    if (it) {
+                                        onAutoShareTagChange(true)
+                                    } else {
+                                        showAutoShareDisableConfirm = true
+                                    }
+                                }
                             )
                         }
 
@@ -1042,6 +1059,27 @@ fun MiscScreen(
                     )
                 }
 
+                if (showAutoShareDisableConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showAutoShareDisableConfirm = false },
+                        title = { Text(text = stringResource(R.string.auto_share_disable_confirm_title)) },
+                        text = { Text(text = stringResource(R.string.auto_share_disable_confirm_message)) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showAutoShareDisableConfirm = false
+                                onAutoShareTagChange(false)
+                            }) {
+                                Text(text = stringResource(R.string.action_confirm))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showAutoShareDisableConfirm = false }) {
+                                Text(text = stringResource(R.string.action_cancel))
+                            }
+                        }
+                    )
+                }
+
                 if (showImportTypeDialog) {
                     val importingTagMsg = stringResource(R.string.misc_importing_tag_package)
                     AlertDialog(
@@ -1201,6 +1239,54 @@ fun MiscScreen(
                         onClick = { uriHandler.openUri(boostLink.value) },
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+
+                NeuPanel(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.misc_device_id_label),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                            SelectionContainer(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = installId,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                        OutlinedTextField(
+                            value = nickname,
+                            onValueChange = { nickname = it },
+                            label = { Text(stringResource(R.string.misc_nickname_label)) },
+                            placeholder = { Text(stringResource(R.string.misc_nickname_hint)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        NeuButton(
+                            text = stringResource(R.string.misc_nickname_save),
+                            onClick = {
+                                val trimmed = nickname.trim()
+                                miscPrefs.edit().putString(KEY_NICKNAME, trimmed).apply()
+                                coroutineScope.launch {
+                                    val ok = AnalyticsReporter.saveNickname(context, trimmed)
+                                    message = if (ok) {
+                                        context.getString(R.string.misc_nickname_saved)
+                                    } else {
+                                        context.getString(R.string.misc_nickname_save_failed)
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
 
                 if (footerLogos.isNotEmpty()) {

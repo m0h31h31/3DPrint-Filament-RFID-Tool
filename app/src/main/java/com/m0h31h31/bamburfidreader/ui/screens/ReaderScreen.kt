@@ -90,6 +90,7 @@ import kotlin.random.Random
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.text.selection.SelectionContainer
 
 @Composable
 private fun CompactField(
@@ -169,6 +170,7 @@ fun ReaderScreen(
     readerCrealityMaterial: CrealityMaterial? = null,
     readerSnapmakerTagData: SnapmakerTagData? = null,
     readerBrandStatus: String = "",
+    onReportAnomaly: ((trayUid: String, cardUid: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiStyle = LocalAppUiStyle.current
@@ -197,6 +199,9 @@ fun ReaderScreen(
     var meritTotal by remember { mutableStateOf(loadMeritCount(context)) }
     var meritToastPaletteIndex by remember { mutableStateOf(0) }
     var showOutboundConfirm by remember(state.trayUidHex) { mutableStateOf(false) }
+    var showAnomalyConfirm by remember { mutableStateOf(false) }
+    var anomalyReportResult by remember { mutableStateOf("") }
+    val coroutineScope = rememberCoroutineScope()
     var editOriginalMaterial by remember { mutableStateOf(state.originalMaterial) }
     var editNotes by remember { mutableStateOf(state.notes) }
     val notesDebounceJob = remember { mutableStateOf<Job?>(null) }
@@ -603,6 +608,45 @@ fun ReaderScreen(
                         }
                     )
                 }
+                if (showAnomalyConfirm && onReportAnomaly != null) {
+                    val reportSuccessText = stringResource(R.string.anomaly_report_success)
+                    val reportFailText = stringResource(R.string.anomaly_report_fail)
+                    AlertDialog(
+                        onDismissRequest = { showAnomalyConfirm = false },
+                        title = { Text(stringResource(R.string.anomaly_dialog_title)) },
+                        text = { Text(stringResource(R.string.anomaly_dialog_message)) },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    val trayUid = state.trayUidHex
+                                    val cardUid = state.uidHex
+                                    showAnomalyConfirm = false
+                                    coroutineScope.launch {
+                                        onReportAnomaly(trayUid, cardUid)
+                                        anomalyReportResult = reportSuccessText
+                                        kotlinx.coroutines.delay(3000)
+                                        anomalyReportResult = ""
+                                    }
+                                }
+                            ) {
+                                Text(stringResource(R.string.anomaly_dialog_confirm))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showAnomalyConfirm = false }) {
+                                Text(stringResource(R.string.anomaly_dialog_cancel))
+                            }
+                        }
+                    )
+                }
+                if (anomalyReportResult.isNotBlank()) {
+                    Text(
+                        text = anomalyReportResult,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+                }
 
 //                if (state.blockHexes.any { it.isNotBlank() }) {
 //                    Card(modifier = Modifier.fillMaxWidth()) {
@@ -689,6 +733,8 @@ fun ReaderScreen(
                             ) {
                                 when (readerBrand) {
                                     ReaderBrand.BAMBU -> {
+                                        SelectionContainer {
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Text(
                                             text = stringResource(R.string.label_other_info),
                                             style = MaterialTheme.typography.titleSmall
@@ -707,6 +753,8 @@ fun ReaderScreen(
                                                 inline = true
                                             )
                                         }
+                                        } // end SelectionContainer Column
+                                        } // end SelectionContainer
                                         if (trayUidAvailable) {
                                             CompactField(
                                                 value = editOriginalMaterial,
@@ -737,6 +785,8 @@ fun ReaderScreen(
                                         }
                                     }
                                     ReaderBrand.CREALITY -> {
+                                        SelectionContainer {
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Text(
                                             text = stringResource(R.string.label_other_info),
                                             style = MaterialTheme.typography.titleSmall
@@ -769,8 +819,12 @@ fun ReaderScreen(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
+                                        } // end Column
+                                        } // end SelectionContainer
                                     }
                                     ReaderBrand.SNAPMAKER -> {
+                                        SelectionContainer {
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Text(
                                             text = "快造 耗材信息",
                                             style = MaterialTheme.typography.titleSmall
@@ -801,6 +855,8 @@ fun ReaderScreen(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
+                                        } // end Column
+                                        } // end SelectionContainer
                                     }
                                 }
                             }
@@ -811,12 +867,36 @@ fun ReaderScreen(
                             ) {
                                 when (readerBrand) {
                                     ReaderBrand.BAMBU -> {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                        if (onReportAnomaly != null && state.trayUidHex.isNotBlank()) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(74.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(Color(0xFFD32F2F))
+                                                    .clickable { showAnomalyConfirm = true }
+                                                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "异常\n上报",
+                                                    color = Color.White,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    textAlign = TextAlign.Center,
+                                                    lineHeight = 15.sp
+                                                )
+                                            }
+                                        }
                                         androidx.compose.foundation.Image(
                                             painter = painterResource(id = R.drawable.logo_mark),
                                             contentDescription = stringResource(R.string.content_logo),
                                             colorFilter = ColorFilter.tint(animatedLogoTintColor),
                                             modifier = Modifier
-                                                .size(80.dp, 250.dp)
+                                                .size(80.dp, 200.dp)
                                                 .clickable(
                                                     indication = null,
                                                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -828,6 +908,7 @@ fun ReaderScreen(
                                                     meritToastNonce += 1
                                                 }
                                         )
+                                        }
                                     }
                                     ReaderBrand.CREALITY -> {
                                         val crealityHex = readerCrealityTagData?.colorHex ?: ""

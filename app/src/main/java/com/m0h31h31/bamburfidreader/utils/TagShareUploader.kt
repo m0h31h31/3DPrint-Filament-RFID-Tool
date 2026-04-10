@@ -31,7 +31,7 @@ object TagShareUploader {
         }
         val deviceId = AnalyticsReporter.getInstallId(context)
         return try {
-            val ok = NetworkUtils.postJson(endpoint.value, buildRawPayload(brand, rawData, deviceId))
+            val ok = NetworkUtils.postJson(endpoint.value, buildRawPayload(brand, rawData, deviceId), AnalyticsReporter.apiKeyHeaders())
             logDebug(if (ok) "TagShareUploader: 上传成功 brand=$brand uid=${rawData.uidHex}"
                      else    "TagShareUploader: 上传失败 brand=$brand uid=${rawData.uidHex}")
             ok
