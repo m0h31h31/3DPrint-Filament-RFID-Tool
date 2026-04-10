@@ -436,16 +436,14 @@ private fun SnapTagListItem(
                         fontSize = 12.sp, color = subtitleColor
                     )
                 }
-                // Color swatch on the right
-                if (item.rgb1 != 0) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF000000 or item.rgb1.toLong()))
-                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
-                    )
-                }
+                // Color swatch on the right — rgb1==0 means black (#000000), always show
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF000000 or item.rgb1.toLong()))
+                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                )
             }
         }
     }
@@ -459,8 +457,8 @@ private fun SnapColorSwatchTile(
     onTap: () -> Unit
 ) {
     val swatchShape = RoundedCornerShape(10.dp)
-    val bgColor = if (group.rgb1 != 0) Color(0xFF000000 or group.rgb1.toLong())
-                  else MaterialTheme.colorScheme.surfaceVariant
+    // rgb1==0 means black (#000000), not "no color" — always use the actual RGB value
+    val bgColor = Color(0xFF000000 or group.rgb1.toLong())
 
     Box(
         modifier = Modifier
@@ -517,15 +515,14 @@ private fun SnapUidSelectionDialog(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (group.rgb1 != 0) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF000000 or group.rgb1.toLong()))
-                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                        )
-                    }
+                    // rgb1==0 means black, always show
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF000000 or group.rgb1.toLong()))
+                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                    )
                     Text(
                         text = typeKey,
                         style = MaterialTheme.typography.titleSmall,

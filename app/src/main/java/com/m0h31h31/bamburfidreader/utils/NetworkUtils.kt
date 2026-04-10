@@ -97,6 +97,7 @@ object NetworkUtils {
         headers: Map<String, String> = emptyMap()
     ): JSONObject? {
         return withContext(Dispatchers.IO) {
+            com.m0h31h31.bamburfidreader.logDebug("NetworkUtils GET $urlString")
             val url = URL(urlString)
             val connection = url.openConnection() as HttpURLConnection
             connection.apply {
@@ -110,11 +111,16 @@ object NetworkUtils {
             }
             try {
                 val code = connection.responseCode
-                if (code !in 200..299) return@withContext null
+                if (code !in 200..299) {
+                    val errBody = connection.errorStream?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
+                    com.m0h31h31.bamburfidreader.logDebug("NetworkUtils GET $urlString → $code  body=$errBody")
+                    return@withContext null
+                }
                 val body = connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                com.m0h31h31.bamburfidreader.logDebug("NetworkUtils GET $urlString → $code OK")
                 JSONObject(body)
             } catch (e: Exception) {
-                com.m0h31h31.bamburfidreader.logDebug("Failed to GET JSON from $urlString: ${e.message}")
+                com.m0h31h31.bamburfidreader.logDebug("NetworkUtils GET $urlString exception: ${e.message}")
                 null
             } finally {
                 connection.disconnect()
@@ -128,6 +134,7 @@ object NetworkUtils {
         headers: Map<String, String> = emptyMap()
     ): Boolean {
         return withContext(Dispatchers.IO) {
+            com.m0h31h31.bamburfidreader.logDebug("NetworkUtils POST $urlString payload=${payload}")
             val url = URL(urlString)
             val connection = url.openConnection() as HttpURLConnection
             connection.apply {
@@ -149,9 +156,16 @@ object NetworkUtils {
                     output.write(payload.toString().toByteArray(Charsets.UTF_8))
                 }
                 val code = connection.responseCode
-                code in 200..299
+                if (code !in 200..299) {
+                    val errBody = connection.errorStream?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
+                    com.m0h31h31.bamburfidreader.logDebug("NetworkUtils POST $urlString → $code  body=$errBody")
+                    false
+                } else {
+                    com.m0h31h31.bamburfidreader.logDebug("NetworkUtils POST $urlString → $code OK")
+                    true
+                }
             } catch (e: Exception) {
-                com.m0h31h31.bamburfidreader.logDebug("Failed to POST JSON to $urlString: ${e.message}")
+                com.m0h31h31.bamburfidreader.logDebug("NetworkUtils POST $urlString exception: ${e.message}")
                 false
             } finally {
                 connection.disconnect()

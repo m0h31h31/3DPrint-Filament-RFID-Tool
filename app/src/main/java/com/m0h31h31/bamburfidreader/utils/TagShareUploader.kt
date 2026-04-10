@@ -25,6 +25,7 @@ object TagShareUploader {
      */
     suspend fun uploadRawTag(context: Context, brand: String, rawData: RawTagReadData): Boolean {
         val endpoint = ConfigManager.getTagShareEndpoint(context)
+        logDebug("TagShareUploader.uploadRawTag endpoint=${endpoint.value} isUsable=${endpoint.isUsable} brand=$brand uid=${rawData.uidHex}")
         if (!endpoint.isUsable) {
             logDebug("TagShareUploader: tagShareEndpoint 未配置，跳过上传")
             return false

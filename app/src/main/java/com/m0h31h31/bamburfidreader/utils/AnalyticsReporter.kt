@@ -35,8 +35,13 @@ object AnalyticsReporter {
      * @return true 表示上报成功（含重复上报），false 表示请求失败。
      */
     suspend fun reportAnomaly(context: Context, trayUid: String, cardUid: String = ""): Boolean {
-        val endpoint = ConfigManager.getAnomalyReportEndpoint(context).value
-        if (endpoint.isBlank()) return false
+        val cfg = ConfigManager.getAnomalyReportEndpoint(context)
+        val endpoint = cfg.value
+        com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.reportAnomaly endpoint=$endpoint (from config: ${cfg.isUsable})")
+        if (endpoint.isBlank()) {
+            com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.reportAnomaly: endpoint blank, skipped")
+            return false
+        }
         val installId = getInstallId(context)
         val payload = org.json.JSONObject().apply {
             put("uid", trayUid.lowercase().trim())
@@ -44,7 +49,9 @@ object AnalyticsReporter {
             put("device_id", installId)
             put("timestamp_ms", System.currentTimeMillis())
         }
-        return NetworkUtils.postJson(endpoint, payload, apiKeyHeaders())
+        val ok = NetworkUtils.postJson(endpoint, payload, apiKeyHeaders())
+        com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.reportAnomaly result=$ok uid=$trayUid")
+        return ok
     }
 
     /**
@@ -52,27 +59,48 @@ object AnalyticsReporter {
      * @return 异常 UID 集合，失败时返回 null。
      */
     suspend fun fetchAnomalyUids(context: Context): Set<String>? {
-        val endpoint = ConfigManager.getAnomalyUidsEndpoint(context).value
-        if (endpoint.isBlank()) return null
-        val json = NetworkUtils.getJson(endpoint, apiKeyHeaders()) ?: return null
-        val arr = json.optJSONArray("uids") ?: return null
+        val cfg = ConfigManager.getAnomalyUidsEndpoint(context)
+        val endpoint = cfg.value
+        com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.fetchAnomalyUids endpoint=$endpoint (from config: ${cfg.isUsable})")
+        if (endpoint.isBlank()) {
+            com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.fetchAnomalyUids: endpoint blank, skipped")
+            return null
+        }
+        val json = NetworkUtils.getJson(endpoint, apiKeyHeaders())
+        if (json == null) {
+            com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.fetchAnomalyUids: response null")
+            return null
+        }
+        val arr = json.optJSONArray("uids")
+        if (arr == null) {
+            com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.fetchAnomalyUids: no 'uids' array in response: $json")
+            return null
+        }
         val result = mutableSetOf<String>()
         for (i in 0 until arr.length()) {
             val uid = arr.optString(i).lowercase().trim()
             if (uid.isNotBlank()) result.add(uid)
         }
+        com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.fetchAnomalyUids: got ${result.size} uids")
         return result
     }
 
     suspend fun saveNickname(context: Context, nickname: String): Boolean {
-        val endpoint = ConfigManager.getNicknameEndpoint(context).value
-        if (endpoint.isBlank()) return false
+        val cfg = ConfigManager.getNicknameEndpoint(context)
+        val endpoint = cfg.value
+        com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.saveNickname endpoint=$endpoint (from config: ${cfg.isUsable})")
+        if (endpoint.isBlank()) {
+            com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.saveNickname: endpoint blank, skipped")
+            return false
+        }
         val installId = getInstallId(context)
         val payload = JSONObject().apply {
             put("install_id", installId)
             put("nickname", nickname.trim())
         }
-        return NetworkUtils.postJson(endpoint, payload, apiKeyHeaders())
+        val ok = NetworkUtils.postJson(endpoint, payload, apiKeyHeaders())
+        com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.saveNickname result=$ok")
+        return ok
     }
 
     suspend fun reportInstallAndLaunch(context: Context) {
