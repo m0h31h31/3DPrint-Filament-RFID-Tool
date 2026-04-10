@@ -830,36 +830,38 @@ fun ReaderScreen(
                                         )
                                     }
                                     ReaderBrand.CREALITY -> {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(72.dp)
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .background(MaterialTheme.colorScheme.secondaryContainer),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = "创想",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
+                                        val crealityHex = readerCrealityTagData?.colorHex ?: ""
+                                        val crealityBase = parseColorValue(crealityHex)
+                                            ?: MaterialTheme.colorScheme.onSurfaceVariant
+                                        val crealityTint = if (crealityBase.alpha < 0.45f) crealityBase.copy(alpha = 0.75f) else crealityBase
+                                        val animatedCrealityTint by animateColorAsState(
+                                            targetValue = crealityTint,
+                                            animationSpec = tween(durationMillis = 550),
+                                            label = "creality_logo_tint"
+                                        )
+                                        androidx.compose.foundation.Image(
+                                            painter = painterResource(id = R.drawable.creality_logo_mask),
+                                            contentDescription = "Creality",
+                                            colorFilter = ColorFilter.tint(animatedCrealityTint),
+                                            modifier = Modifier.size(80.dp, 250.dp)
+                                        )
                                     }
                                     ReaderBrand.SNAPMAKER -> {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(72.dp)
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .background(MaterialTheme.colorScheme.tertiaryContainer),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = "快造",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
+                                        val snapHex = readerSnapmakerTagData?.let { "%06X".format(it.rgb1) } ?: ""
+                                        val snapBase = parseColorValue(snapHex)
+                                            ?: MaterialTheme.colorScheme.onSurfaceVariant
+                                        val snapTint = if (snapBase.alpha < 0.45f) snapBase.copy(alpha = 0.75f) else snapBase
+                                        val animatedSnapTint by animateColorAsState(
+                                            targetValue = snapTint,
+                                            animationSpec = tween(durationMillis = 550),
+                                            label = "snapmaker_logo_tint"
+                                        )
+                                        androidx.compose.foundation.Image(
+                                            painter = painterResource(id = R.drawable.snapmaker_logo_mask),
+                                            contentDescription = "Snapmaker",
+                                            colorFilter = ColorFilter.tint(animatedSnapTint),
+                                            modifier = Modifier.size(80.dp, 250.dp)
+                                        )
                                     }
                                 }
                             }

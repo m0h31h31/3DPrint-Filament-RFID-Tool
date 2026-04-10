@@ -68,7 +68,7 @@ private val topDestinations = listOf(
     TopDestination("inventory", R.string.tab_inventory, R.drawable.kucun),
     TopDestination("data", R.string.tab_data, R.drawable.shuju),
     TopDestination("tag", R.string.tab_tag, R.drawable.bambu),
-    TopDestination("snapmaker", R.string.tab_snapmaker, R.drawable.bambu),
+    TopDestination("snapmaker", R.string.tab_snapmaker, R.drawable.snapmaker),
     TopDestination("creality", R.string.tab_creality, R.drawable.chuangxiang),
     TopDestination("misc", R.string.tab_misc, R.drawable.zaxiang)
 )
@@ -94,6 +94,8 @@ fun AppNavigation(
     onSaveKeysToFileChange: (Boolean) -> Unit,
     onFormatTagDebugEnabledChange: (Boolean) -> Unit,
     onForceOverwriteImportChange: (Boolean) -> Unit,
+    bambuTagEnabled: Boolean = true,
+    onBambuTagEnabledChange: (Boolean) -> Unit = {},
     crealityEnabled: Boolean = false,
     onCrealityEnabledChange: (Boolean) -> Unit = {},
     crealityTagData: CrealityTagData? = null,
@@ -104,6 +106,8 @@ fun AppNavigation(
     onCrealityClearTagData: () -> Unit = {},
     inventoryEnabled: Boolean = false,
     onInventoryEnabledChange: (Boolean) -> Unit = {},
+    autoDetectBrand: Boolean = false,
+    onAutoDetectBrandChange: (Boolean) -> Unit = {},
     autoShareTag: Boolean = true,
     onAutoShareTagChange: (Boolean) -> Unit = {},
     hideCopiedTags: Boolean = true,
@@ -180,10 +184,11 @@ fun AppNavigation(
     LaunchedEffect(currentRoute) {
         onActiveRouteChange(currentRoute ?: "reader")
     }
-    val visibleDestinations = remember(inventoryEnabled, crealityEnabled, snapmakerTagEnabled) {
+    val visibleDestinations = remember(inventoryEnabled, crealityEnabled, snapmakerTagEnabled, bambuTagEnabled) {
         topDestinations.filter { dest ->
             when (dest.route) {
                 "inventory", "data" -> inventoryEnabled
+                "tag" -> bambuTagEnabled
                 "creality" -> crealityEnabled
                 "snapmaker" -> snapmakerTagEnabled
                 else -> true
@@ -193,6 +198,14 @@ fun AppNavigation(
 
     LaunchedEffect(inventoryEnabled) {
         if (!inventoryEnabled && (currentRoute == "inventory" || currentRoute == "data")) {
+            navController.navigate("reader") {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = false }
+                launchSingleTop = true
+            }
+        }
+    }
+    LaunchedEffect(bambuTagEnabled) {
+        if (!bambuTagEnabled && currentRoute == "tag") {
             navController.navigate("reader") {
                 popUpTo(navController.graph.findStartDestination().id) { saveState = false }
                 launchSingleTop = true
@@ -275,7 +288,7 @@ fun AppNavigation(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (resolvedUiStyle == AppUiStyle.MIUIX) {
-                key(inventoryEnabled, crealityEnabled) {
+                key(inventoryEnabled, bambuTagEnabled, crealityEnabled) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -306,7 +319,7 @@ fun AppNavigation(
                 }
                 } // key
             } else {
-                key(inventoryEnabled, crealityEnabled) {
+                key(inventoryEnabled, bambuTagEnabled, crealityEnabled) {
                 NeuPanel(
                     modifier = Modifier
                         .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -450,10 +463,14 @@ fun AppNavigation(
                             val appConfigBoostLink = ConfigManager.getAppConfigBoostLink(context)
                             val appConfigLogoLinks = ConfigManager.getAppConfigLogoLinks(context)
                             MiscScreen(
+                                bambuTagEnabled = bambuTagEnabled,
+                                onBambuTagEnabledChange = onBambuTagEnabledChange,
                                 crealityEnabled = crealityEnabled,
                                 onCrealityEnabledChange = onCrealityEnabledChange,
                                 inventoryEnabled = inventoryEnabled,
                                 onInventoryEnabledChange = onInventoryEnabledChange,
+                                autoDetectBrand = autoDetectBrand,
+                                onAutoDetectBrandChange = onAutoDetectBrandChange,
                                 autoShareTag = autoShareTag,
                                 onAutoShareTagChange = onAutoShareTagChange,
                                 hideCopiedTags = hideCopiedTags,

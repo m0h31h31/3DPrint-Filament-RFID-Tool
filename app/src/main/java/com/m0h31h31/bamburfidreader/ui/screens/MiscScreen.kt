@@ -199,10 +199,14 @@ fun MiscScreen(
     cuidTestInProgress: Boolean = false,
     onEnqueueCuidTest: () -> String = { "" },
     onCancelCuidTest: () -> String = { "" },
+    bambuTagEnabled: Boolean = true,
+    onBambuTagEnabledChange: (Boolean) -> Unit = {},
     crealityEnabled: Boolean = false,
     onCrealityEnabledChange: (Boolean) -> Unit = {},
     inventoryEnabled: Boolean = false,
     onInventoryEnabledChange: (Boolean) -> Unit = {},
+    autoDetectBrand: Boolean = false,
+    onAutoDetectBrandChange: (Boolean) -> Unit = {},
     autoShareTag: Boolean = true,
     onAutoShareTagChange: (Boolean) -> Unit = {},
     hideCopiedTags: Boolean = true,
@@ -721,6 +725,28 @@ fun MiscScreen(
                                 modifier = Modifier.weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
+                                Text(text = stringResource(R.string.config_bambu_feature))
+                                Text(
+                                    text = stringResource(R.string.config_bambu_feature_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            AppSwitch(
+                                checked = bambuTagEnabled,
+                                onCheckedChange = { onBambuTagEnabledChange(it) }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
                                 Text(text = stringResource(R.string.config_creality_feature))
                                 Text(
                                     text = stringResource(R.string.config_creality_feature_desc),
@@ -775,6 +801,28 @@ fun MiscScreen(
                             AppSwitch(
                                 checked = inventoryEnabled,
                                 onCheckedChange = { onInventoryEnabledChange(it) }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(text = stringResource(R.string.config_auto_detect_brand))
+                                Text(
+                                    text = stringResource(R.string.config_auto_detect_brand_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            AppSwitch(
+                                checked = autoDetectBrand,
+                                onCheckedChange = { onAutoDetectBrandChange(it) }
                             )
                         }
 

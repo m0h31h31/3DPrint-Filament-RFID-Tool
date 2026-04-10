@@ -124,9 +124,11 @@ private const val KEY_TAG_VIEW_MODE = "tag_view_mode"
 private const val KEY_COLOR_PALETTE = "color_palette"
 private const val KEY_USER_AGREEMENT_VERSION = "user_agreement_version"
 private const val CURRENT_USER_AGREEMENT_VERSION = 1
+private const val KEY_BAMBU_TAG_ENABLED = "bambu_tag_enabled"
 private const val KEY_CREALITY_ENABLED = "creality_enabled"
 private const val KEY_SNAPMAKER_TAG_ENABLED = "snapmaker_tag_enabled"
 private const val KEY_AUTO_SHARE_TAG = "auto_share_tag"
+private const val KEY_AUTO_DETECT_BRAND = "auto_detect_brand"
 private const val KEY_NOTICE_GUIDE_SHOWN = "notice_guide_shown"
 
 // Creality AES keys
@@ -693,6 +695,7 @@ class MainActivity : ComponentActivity() {
     private var uiStyle by mutableStateOf(AppUiStyle.NEUMORPHIC)
     private var themeMode by mutableStateOf(ThemeMode.SYSTEM)
     private var colorPalette by mutableStateOf(ColorPalette.OCEAN)
+    private var bambuTagEnabled by mutableStateOf(true) // 控制拓竹RFID页面显示
     private var crealityEnabled by mutableStateOf(false) // 控制创想三维RFID页面显示
     private var snapmakerTagEnabled by mutableStateOf(false) // 控制快造复制页面显示
     private var snapmakerShareTagItems by mutableStateOf<List<SnapmakerShareTagItem>>(emptyList())
@@ -708,6 +711,7 @@ class MainActivity : ComponentActivity() {
     private var forceOverwriteImport by mutableStateOf(false) // 控制导入标签包时是否覆盖同UID文件
     private var formatTagDebugEnabled by mutableStateOf(false) // 控制格式化标签调试弹窗
     private var inventoryEnabled by mutableStateOf(false) // 控制库存和数据页面显示
+    private var autoDetectBrand by mutableStateOf(false)  // 自动识别RFID品牌并跳转
     private var autoShareTag by mutableStateOf(true)     // 读取完整数据后自动上传到共享服务器
     private var hideCopiedTags by mutableStateOf(true)   // 隐藏已复制标签
     private var dualTagMode by mutableStateOf(false)      // 双标签模式：复制2次才隐藏
@@ -1069,6 +1073,17 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             } else {
+                // 自动品牌检测：派生秘钥认证sector0，切换品牌后读取
+                if (autoDetectBrand) {
+                    val detected = detectBrandBySector0(tag)
+                    if (detected != null && detected != readerBrand) {
+                        runOnUiThread {
+                            readerBrand = detected
+                            readerBrandStatus = if (detected == ReaderBrand.BAMBU) "" else uiString(R.string.status_waiting_tag)
+                        }
+                        Thread.sleep(100)
+                    }
+                }
                 when (readerBrand) {
                     ReaderBrand.BAMBU -> {
                         val result = readTag(tag)
@@ -1173,9 +1188,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val uiPrefs = getSharedPreferences(UI_PREFS_NAME, Context.MODE_PRIVATE)
         voiceEnabled = uiPrefs.getBoolean(KEY_VOICE_ENABLED, false)
+        bambuTagEnabled = uiPrefs.getBoolean(KEY_BAMBU_TAG_ENABLED, true)
         crealityEnabled = uiPrefs.getBoolean(KEY_CREALITY_ENABLED, false)
         snapmakerTagEnabled = uiPrefs.getBoolean(KEY_SNAPMAKER_TAG_ENABLED, false)
         inventoryEnabled = uiPrefs.getBoolean(KEY_INVENTORY_ENABLED, true)
+        autoDetectBrand = uiPrefs.getBoolean(KEY_AUTO_DETECT_BRAND, false)
         autoShareTag = uiPrefs.getBoolean(KEY_AUTO_SHARE_TAG, true)
         hideCopiedTags = uiPrefs.getBoolean(KEY_HIDE_COPIED_TAGS, true)
         dualTagMode = uiPrefs.getBoolean(KEY_DUAL_TAG_MODE, false)
@@ -1278,6 +1295,11 @@ class MainActivity : ComponentActivity() {
                     onForceOverwriteImportChange = {
                         forceOverwriteImport = it
                     },
+                    bambuTagEnabled = bambuTagEnabled,
+                    onBambuTagEnabledChange = { enabled ->
+                        bambuTagEnabled = enabled
+                        uiPrefs.edit().putBoolean(KEY_BAMBU_TAG_ENABLED, enabled).apply()
+                    },
                     crealityEnabled = crealityEnabled,
                     onCrealityEnabledChange = { enabled ->
                         crealityEnabled = enabled
@@ -1336,6 +1358,11 @@ class MainActivity : ComponentActivity() {
                     onInventoryEnabledChange = { enabled ->
                         inventoryEnabled = enabled
                         uiPrefs.edit().putBoolean(KEY_INVENTORY_ENABLED, enabled).apply()
+                    },
+                    autoDetectBrand = autoDetectBrand,
+                    onAutoDetectBrandChange = { enabled ->
+                        autoDetectBrand = enabled
+                        uiPrefs.edit().putBoolean(KEY_AUTO_DETECT_BRAND, enabled).apply()
                     },
                     autoShareTag = autoShareTag,
                     onAutoShareTagChange = { enabled ->
@@ -2225,17 +2252,82 @@ class MainActivity : ComponentActivity() {
         val sourceBlocks = item.rawBlocks
         if (sourceBlocks.isEmpty()) return "写入失败：源数据为空"
 
+        val uid = tag.id ?: return "写入失败：无法读取卡 UID"
         val ffKey = ByteArray(6) { 0xFF.toByte() }
         val targetSectorCount = minOf(16, mifare.sectorCount)
+        val fullFfTrailer = ByteArray(16).apply {
+            for (i in 0..5) this[i] = 0xFF.toByte()
+            this[6] = 0xFF.toByte(); this[7] = 0x07.toByte()
+            this[8] = 0x80.toByte(); this[9] = 0x69.toByte()
+            for (i in 10..15) this[i] = 0xFF.toByte()
+        }
+
         return try {
             mifare.connect()
             Thread.sleep(700)
+
+            // Phase 0: 检测卡片状态——先尝试 FF 秘钥，再尝试快造派生秘钥
+            val (snapKeysA, snapKeysB) = deriveSnapmakerKeys(uid)
+            val sector0FfAuth = authenticateSectorWithRetry(mifare, 0, listOf(ffKey), listOf(ffKey))
+
+            if (!sector0FfAuth) {
+                // 非空白卡，检查是否为已写入的快造卡
+                reconnectMifareClassic(mifare)
+                val sector0DerivedAuth = authenticateSectorWithRetry(
+                    mifare, 0, listOf(snapKeysA[0]), listOf(snapKeysB[0])
+                )
+                if (!sector0DerivedAuth) {
+                    return "写入失败：标签认证失败（非空白卡且无法通过快造派生秘钥认证）"
+                }
+
+                // Phase 1: 将所有扇区从派生秘钥重置为全 FF
+                onStatusUpdate?.invoke("检测到已写入的快造标签，正在重置...")
+                for (sector in 0 until targetSectorCount) {
+                    onStatusUpdate?.invoke("正在重置扇区 ${sector + 1}/$targetSectorCount...")
+                    val trailerBlock = mifare.sectorToBlock(sector) + 3
+                    val curKeyA = snapKeysA[sector]
+                    val curKeyB = snapKeysB[sector]
+
+                    // 步骤1：仅用派生 KeyB 认证，将权限位改为 FF078069（保留派生秘钥）
+                    reconnectMifareClassic(mifare)
+                    if (!authenticateSectorWithRetry(mifare, sector, emptyList(), listOf(curKeyB))) {
+                        return "写入失败：重置扇区 $sector 派生 KeyB 认证失败"
+                    }
+                    val step1Trailer = ByteArray(16).apply {
+                        System.arraycopy(curKeyA, 0, this, 0, 6)
+                        this[6] = 0xFF.toByte(); this[7] = 0x07.toByte()
+                        this[8] = 0x80.toByte(); this[9] = 0x69.toByte()
+                        System.arraycopy(curKeyB, 0, this, 10, 6)
+                    }
+                    if (!writeBlockWithRetry(mifare, trailerBlock, step1Trailer)) {
+                        return "写入失败：重置扇区 $sector 修改权限位失败"
+                    }
+                    Thread.sleep(15)
+
+                    // 步骤2：权限位已是 FF078069，将 KeyA/B 改为 FF
+                    if (!authenticateSectorWithRetry(mifare, sector, listOf(curKeyA, ffKey), listOf(curKeyB, ffKey))) {
+                        return "写入失败：重置扇区 $sector 步骤2认证失败"
+                    }
+                    if (!writeBlockWithRetry(mifare, trailerBlock, fullFfTrailer)) {
+                        return "写入失败：重置扇区 $sector 重置秘钥为 FF 失败"
+                    }
+                    Thread.sleep(15)
+
+                    // 验证 FF 秘钥可用
+                    if (!authenticateSectorWithRetry(mifare, sector, listOf(ffKey), listOf(ffKey))) {
+                        return "写入失败：重置扇区 $sector FF 秘钥验证失败"
+                    }
+                }
+                onStatusUpdate?.invoke("重置完成，正在写入数据...")
+                Thread.sleep(100)
+            }
+
+            // Phase 2: 使用 FF 秘钥写入源数据
             for (sector in 0 until targetSectorCount) {
-                val trailerIndex = sector * 4 + 3
-                val trailerData = sourceBlocks.getOrNull(trailerIndex)
+                reconnectMifareClassic(mifare)
+                val trailerData = sourceBlocks.getOrNull(sector * 4 + 3)
                 val sourceKeyA = trailerData?.takeIf { it.size == 16 }?.copyOfRange(0, 6)
                 val sourceKeyB = trailerData?.takeIf { it.size == 16 }?.copyOfRange(10, 16)
-
                 val authenticated = authenticateSectorWithRetry(
                     mifare = mifare,
                     sectorIndex = sector,
@@ -3277,6 +3369,9 @@ class MainActivity : ComponentActivity() {
             return "格式化失败：派生秘钥数量不足"
         }
 
+        val (snapKeysA, snapKeysB) = deriveSnapmakerKeys(uid)
+        val crealityKeyA = deriveCrealityKeyA(uid)
+
         val ffKey = ByteArray(6) { 0xFF.toByte() }
         val zeroBlock = ByteArray(16) { 0x00.toByte() }
         val accessDefault = hexToBytes("FF078069")
@@ -3347,6 +3442,63 @@ class MainActivity : ComponentActivity() {
             return derivedAuthStillOk
         }
 
+        fun resetTrailerByCrealityDerivedKey(sector: Int): Boolean {
+            val trailerBlock = mifare.sectorToBlock(sector) + 3
+            // 创想：KeyA=派生，KeyB=FF，访问位=FF078069，可直接用 KeyA 写 Trailer
+            reconnectMifareClassic(mifare)
+            if (!authenticateSectorWithRetry(mifare, sector, listOf(crealityKeyA), listOf(ffKey))) {
+                logStep("扇区$sector: 创想派生 KeyA 认证失败")
+                return false
+            }
+            if (!writeBlockWithRetry(mifare, trailerBlock, buildTrailer(ffKey, accessDefault, ffKey))) {
+                logStep("扇区$sector: 创想重置秘钥为 FF 失败")
+                return false
+            }
+            Thread.sleep(15)
+            val ffAuthOk = authenticateSectorWithRetry(mifare, sector, listOf(ffKey), listOf(ffKey))
+            logStep("扇区$sector: 创想重置后 FF 验证${if (ffAuthOk) "成功" else "失败"}")
+            return ffAuthOk
+        }
+
+        fun resetTrailerBySnapmakerDerivedKeys(sector: Int): Boolean {
+            val trailerBlock = mifare.sectorToBlock(sector) + 3
+            val curKeyA = snapKeysA[sector]
+            val curKeyB = snapKeysB[sector]
+
+            // 步骤1：仅用派生 KeyB 认证，将权限位改为 FF078069（保留派生秘钥）
+            reconnectMifareClassic(mifare)
+            if (!authenticateSectorWithRetry(mifare, sector, emptyList(), listOf(curKeyB))) {
+                logStep("扇区$sector: 快造派生 KeyB 认证失败")
+                return false
+            }
+            val step1Trailer = ByteArray(16).apply {
+                System.arraycopy(curKeyA, 0, this, 0, 6)
+                this[6] = 0xFF.toByte(); this[7] = 0x07.toByte()
+                this[8] = 0x80.toByte(); this[9] = 0x69.toByte()
+                System.arraycopy(curKeyB, 0, this, 10, 6)
+            }
+            if (!writeBlockWithRetry(mifare, trailerBlock, step1Trailer)) {
+                logStep("扇区$sector: 快造修改权限位失败")
+                return false
+            }
+            Thread.sleep(15)
+
+            // 步骤2：权限位已是 FF078069，将 KeyA/B 改为 FF
+            if (!authenticateSectorWithRetry(mifare, sector, listOf(curKeyA, ffKey), listOf(curKeyB, ffKey))) {
+                logStep("扇区$sector: 快造步骤2认证失败")
+                return false
+            }
+            if (!writeBlockWithRetry(mifare, trailerBlock, buildTrailer(ffKey, accessDefault, ffKey))) {
+                logStep("扇区$sector: 快造重置秘钥为 FF 失败")
+                return false
+            }
+            Thread.sleep(15)
+
+            val ffAuthOk = authenticateSectorWithRetry(mifare, sector, listOf(ffKey), listOf(ffKey))
+            logStep("扇区$sector: 快造重置后 FF 验证${if (ffAuthOk) "成功" else "失败"}")
+            return ffAuthOk
+        }
+
         return try {
             mifare.connect()
             onStatusUpdate?.invoke("正在格式化")
@@ -3356,32 +3508,35 @@ class MainActivity : ComponentActivity() {
                 return fail("格式化失败：标签扇区数量不足 ${mifare.sectorCount}")
             }
 
+            // 记录第0扇区成功的品牌，后续扇区优先使用
+            var detectedBrand = "bambu"
             val originalBlock0 = run {
-                val authByDerived = authenticateSectorWithRetry(
-                    mifare = mifare,
-                    sectorIndex = 0,
-                    keysA = listOf(derivedKeysA[0]),
-                    keysB = listOf(derivedKeysB[0])
-                )
-                val authOk = if (authByDerived) {
-                    true
-                } else {
-                    val authByFf = authenticateSectorWithRetry(
-                        mifare = mifare,
-                        sectorIndex = 0,
+                when {
+                    authenticateSectorWithRetry(
+                        mifare, 0,
+                        keysA = listOf(derivedKeysA[0]),
+                        keysB = listOf(derivedKeysB[0])
+                    ) -> { logStep("扇区0: 拓竹派生秘钥认证成功"); detectedBrand = "bambu" }
+                    authenticateSectorWithRetry(
+                        mifare, 0,
                         keysA = listOf(ffKey),
                         keysB = listOf(ffKey)
-                    )
-                    if (authByFf) {
-                        logStep("扇区0派生秘钥认证失败，FF认证成功（该扇区可能已重置）")
-                    }
-                    authByFf
-                }
-                if (!authOk) {
-                    return fail("格式化失败：扇区0 使用派生秘钥/FF秘钥认证失败，无法读取块0")
+                    ) -> { logStep("扇区0: FF秘钥认证成功"); detectedBrand = "ff" }
+                    authenticateSectorWithRetry(
+                        mifare, 0,
+                        keysA = listOf(crealityKeyA),
+                        keysB = listOf(ffKey)
+                    ) -> { logStep("扇区0: 创想派生秘钥认证成功"); detectedBrand = "creality" }
+                    authenticateSectorWithRetry(
+                        mifare, 0,
+                        keysA = listOf(snapKeysA[0]),
+                        keysB = listOf(snapKeysB[0])
+                    ) -> { logStep("扇区0: 快造派生秘钥认证成功"); detectedBrand = "snapmaker" }
+                    else -> return fail("格式化失败：扇区0 拓竹/FF/创想/快造秘钥认证均失败，无法读取块0")
                 }
                 readBlockWithRetry(mifare, 0) ?: return fail("格式化失败：读取块0失败")
             }
+            logStep("检测到卡片品牌：$detectedBrand，后续扇区优先使用此品牌秘钥")
             logStep("块0读取成功（用于最终校验）")
 
             fun runStep3VerifyByFf(): String? {
@@ -3423,60 +3578,95 @@ class MainActivity : ComponentActivity() {
                     logStep("步骤3FF校验失败后重试：第${attempt}次重试（最多${maxStep3RetryCount}次）")
                 }
 
-                // 第一步：使用派生秘钥将所有 trailer 重置为默认 FF trailer（优先KeyB，兼容用KeyA）
+                // 第一步：重置所有扇区 trailer 为 FF，优先使用第0扇区检测到的品牌秘钥
+                // brandOrder: 检测品牌排第一，其余依次
+                val allBrands = listOf("bambu", "ff", "creality", "snapmaker")
+                val brandOrder = listOf(detectedBrand) + (allBrands - detectedBrand)
+
                 for (sector in 0 until targetSectorCount) {
-                    logStep("步骤1/3 扇区$sector: 开始重置 trailer")
-                    val authByDerived = authenticateSectorWithRetry(
-                        mifare = mifare,
-                        sectorIndex = sector,
-                        keysA = listOf(derivedKeysA[sector]),
-                        keysB = listOf(derivedKeysB[sector])
-                    )
-                    if (!authByDerived) {
-                        logStep("扇区$sector: 派生秘钥认证失败，尝试 FF 认证")
-                        val authByFf = authenticateSectorWithRetry(
-                            mifare = mifare,
-                            sectorIndex = sector,
-                            keysA = listOf(ffKey),
-                            keysB = listOf(ffKey)
-                        )
-                        if (authByFf) {
-                            logStep("扇区 $sector 派生秘钥认证失败，FF认证成功，判定已重置")
-                            // 检查权限位是否为 FF078069，不是则修正
-                            val trailerBlock = mifare.sectorToBlock(sector) + 3
-                            val trailerData = readBlockWithRetry(mifare, trailerBlock)
-                            if (trailerData != null) {
-                                val currentAccess = trailerData.copyOfRange(6, 10)
-                                val defaultAccess = hexToBytes("FF078069")
-                                if (!currentAccess.contentEquals(defaultAccess)) {
-                                    logStep("扇区$sector: 权限位非标准，使用KeyB重新认证并修正为 FF078069")
-                                    val fixedTrailer = buildTrailer(ffKey, defaultAccess, ffKey)
-                                    val reAuthKeyB = authenticateSectorWithRetry(
-                                        mifare = mifare,
-                                        sectorIndex = sector,
-                                        keysA = emptyList(),
-                                        keysB = listOf(ffKey)
-                                    )
-                                    if (reAuthKeyB && writeBlockWithRetry(mifare, trailerBlock, fixedTrailer)) {
-                                        logStep("扇区$sector: 权限位已修正为 FF078069")
-                                    } else {
-                                        logStep("扇区$sector: 权限位修正失败，继续")
-                                    }
-                                } else {
-                                    logStep("扇区$sector: 权限位已是 FF078069，无需修正")
+                    logStep("步骤1/3 扇区$sector: 开始重置 trailer（优先品牌：$detectedBrand）")
+                    var sectorDone = false
+                    for (brand in brandOrder) {
+                        if (sectorDone) break
+                        when (brand) {
+                            "bambu" -> {
+                                val auth = authenticateSectorWithRetry(
+                                    mifare, sector,
+                                    keysA = listOf(derivedKeysA[sector]),
+                                    keysB = listOf(derivedKeysB[sector])
+                                )
+                                if (auth) {
+                                    logStep("扇区$sector: 拓竹派生秘钥认证成功，重置 trailer")
+                                    if (!resetTrailerByDerivedKeyBStages(sector))
+                                        return fail("格式化失败：扇区 $sector 拓竹 trailer 重置失败")
+                                    logStep("扇区$sector: 拓竹 trailer 重置成功")
+                                    sectorDone = true
                                 }
                             }
-                            continue
+                            "ff" -> {
+                                val auth = authenticateSectorWithRetry(
+                                    mifare, sector,
+                                    keysA = listOf(ffKey),
+                                    keysB = listOf(ffKey)
+                                )
+                                if (auth) {
+                                    logStep("扇区$sector: FF认证成功，检查权限位")
+                                    val trailerBlock = mifare.sectorToBlock(sector) + 3
+                                    val trailerData = readBlockWithRetry(mifare, trailerBlock)
+                                    if (trailerData != null) {
+                                        val currentAccess = trailerData.copyOfRange(6, 10)
+                                        if (!currentAccess.contentEquals(accessDefault)) {
+                                            logStep("扇区$sector: 权限位非标准，修正为 FF078069")
+                                            val reAuthKeyB = authenticateSectorWithRetry(
+                                                mifare, sector,
+                                                keysA = emptyList(),
+                                                keysB = listOf(ffKey)
+                                            )
+                                            if (reAuthKeyB && writeBlockWithRetry(mifare, trailerBlock, buildTrailer(ffKey, accessDefault, ffKey))) {
+                                                logStep("扇区$sector: 权限位修正成功")
+                                            } else {
+                                                logStep("扇区$sector: 权限位修正失败，继续")
+                                            }
+                                        } else {
+                                            logStep("扇区$sector: 权限位已是 FF078069")
+                                        }
+                                    }
+                                    sectorDone = true
+                                }
+                            }
+                            "creality" -> {
+                                val auth = authenticateSectorWithRetry(
+                                    mifare, sector,
+                                    keysA = listOf(crealityKeyA),
+                                    keysB = listOf(ffKey)
+                                )
+                                if (auth) {
+                                    logStep("扇区$sector: 创想派生秘钥认证成功，重置 trailer")
+                                    if (!resetTrailerByCrealityDerivedKey(sector))
+                                        return fail("格式化失败：扇区 $sector 创想 trailer 重置失败")
+                                    logStep("扇区$sector: 创想 trailer 重置成功")
+                                    sectorDone = true
+                                }
+                            }
+                            "snapmaker" -> {
+                                val auth = authenticateSectorWithRetry(
+                                    mifare, sector,
+                                    keysA = listOf(snapKeysA[sector]),
+                                    keysB = listOf(snapKeysB[sector])
+                                )
+                                if (auth) {
+                                    logStep("扇区$sector: 快造派生秘钥认证成功，重置 trailer")
+                                    if (!resetTrailerBySnapmakerDerivedKeys(sector))
+                                        return fail("格式化失败：扇区 $sector 快造 trailer 重置失败")
+                                    logStep("扇区$sector: 快造 trailer 重置成功")
+                                    sectorDone = true
+                                }
+                            }
                         }
-                        return fail("格式化失败：扇区 $sector 使用派生秘钥/FF秘钥认证失败")
                     }
-                    logStep("扇区$sector: 派生秘钥认证成功，写入默认 trailer")
-                    if (!resetTrailerByDerivedKeyBStages(sector)) {
-                        return fail("格式化失败：扇区 $sector trailer 重置失败")
-                    }
-                    logStep("扇区$sector: trailer 重置成功（FF认证通过）")
+                    if (!sectorDone) return fail("格式化失败：扇区 $sector 拓竹/FF/创想/快造 秘钥认证均失败")
                 }
-                logStep("已重置全部 trailer（以FF或派生秘钥可继续认证为准）")
+                logStep("已重置全部 trailer")
 
                 // 第二步：使用 FF/派生秘钥，将数据区块清零（不清 block0，不清 trailer）
                 for (sector in 0 until targetSectorCount) {
@@ -3484,8 +3674,8 @@ class MainActivity : ComponentActivity() {
                     val authOk = authenticateSectorWithRetry(
                         mifare = mifare,
                         sectorIndex = sector,
-                        keysA = listOf(ffKey, derivedKeysA[sector]),
-                        keysB = listOf(ffKey, derivedKeysB[sector])
+                        keysA = listOf(ffKey, derivedKeysA[sector], crealityKeyA, snapKeysA[sector]),
+                        keysB = listOf(ffKey, derivedKeysB[sector], snapKeysB[sector])
                     )
                     if (!authOk) {
                         return fail("格式化失败：扇区 $sector 使用FF/派生秘钥认证失败")
@@ -4103,6 +4293,51 @@ class MainActivity : ComponentActivity() {
     }
 
     // ── End Creality ─────────────────────────────────────────────────────────
+
+    // ── 自动品牌检测 ──────────────────────────────────────────────────────────
+
+    /**
+     * 通过扇区0秘钥认证判断卡片品牌：
+     * 1. 拓竹：UID派生KeyA/B（deriveWriteKeys）
+     * 2. 创想：AES派生KeyA（deriveCrealityKeyA），KeyB=FF
+     * 3. 快造：HKDF派生KeyA/B（deriveSnapmakerKeys）
+     * 4. 空白/未知：FF秘钥
+     * 返回检测到的 ReaderBrand，或 null 表示无法判断（FF / 未知）
+     */
+    private fun detectBrandBySector0(tag: Tag): ReaderBrand? {
+        val mifare = MifareClassic.get(tag) ?: return null
+        return try {
+            mifare.connect()
+            Thread.sleep(200)
+            val uid = tag.id ?: return null
+            val ffKey = ByteArray(6) { 0xFF.toByte() }
+
+            val bambuKeysA = try { deriveWriteKeys(uid, WRITE_INFO_A) } catch (_: Exception) { emptyList() }
+            val bambuKeysB = try { deriveWriteKeys(uid, WRITE_INFO_B) } catch (_: Exception) { emptyList() }
+            val crealityKey = try { deriveCrealityKeyA(uid) } catch (_: Exception) { null }
+            val (snapKeysA, snapKeysB) = try { deriveSnapmakerKeys(uid) } catch (_: Exception) { Pair(emptyList(), emptyList()) }
+
+            when {
+                bambuKeysA.isNotEmpty() && bambuKeysB.isNotEmpty() &&
+                authenticateSectorWithRetry(mifare, 0, listOf(bambuKeysA[0]), listOf(bambuKeysB[0])) ->
+                    ReaderBrand.BAMBU
+
+                crealityKey != null &&
+                authenticateSectorWithRetry(mifare, 0, listOf(crealityKey), listOf(ffKey)) ->
+                    ReaderBrand.CREALITY
+
+                snapKeysA.isNotEmpty() && snapKeysB.isNotEmpty() &&
+                authenticateSectorWithRetry(mifare, 0, listOf(snapKeysA[0]), listOf(snapKeysB[0])) ->
+                    ReaderBrand.SNAPMAKER
+
+                else -> null
+            }
+        } catch (_: Exception) {
+            null
+        } finally {
+            try { mifare.close() } catch (_: Exception) {}
+        }
+    }
 
     // ── 快造 (Snapmaker) RFID ─────────────────────────────────────────────────
 

@@ -186,6 +186,8 @@
     <string name="misc_clear_share_tags_title">Confirm Clear Tag Database</string>
     <string name="misc_clear_share_tags_message">This will remove all tag records from the database and cannot be undone. Continue?</string>
     <string name="misc_force_overwrite_import">Force overwrite imported tags</string>
+    <string name="config_auto_detect_brand">Auto Detect RFID</string>
+    <string name="config_auto_detect_brand_desc">Auto-detect brand on tap and navigate to the matching reader (Bambu / Creality / Snapmaker)</string>
     <string name="config_inventory_feature">Inventory &amp; Data</string>
     <string name="config_inventory_feature_desc">Enable to show inventory and data pages</string>
     <string name="config_hide_copied_tags">Hide Copied Tags</string>
@@ -264,6 +266,8 @@
     <string name="error_read_exception">Read exception</string>
 
     <string name="tab_creality">Creality</string>
+    <string name="config_bambu_feature">Bambu RFID</string>
+    <string name="config_bambu_feature_desc">Enable Bambu filament tag copy page</string>
     <string name="config_creality_feature">Creality RFID</string>
     <string name="config_creality_feature_desc">Enable Creality filament RFID read/write page</string>
     <string name="creality_scan_hint">Tap a tag to read automatically</string>

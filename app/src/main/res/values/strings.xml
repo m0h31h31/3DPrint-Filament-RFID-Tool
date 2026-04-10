@@ -188,6 +188,8 @@
     <string name="misc_force_overwrite_import">强制覆盖导入标签</string>
     <string name="config_inventory_feature">库存与数据功能</string>
     <string name="config_inventory_feature_desc">开启后显示库存和数据页面</string>
+    <string name="config_auto_detect_brand">自动识别 RFID</string>
+    <string name="config_auto_detect_brand_desc">刷卡时自动检测品牌并跳转到对应识别页（拓竹/创想/快造）</string>
     <string name="config_auto_share_tag">自动共享标签</string>
     <string name="config_auto_share_tag_desc">读取拓竹/快造完整数据后自动上传到共享服务器</string>
     <string name="config_hide_copied_tags">隐藏已复制标签</string>
@@ -267,6 +269,8 @@
     <string name="error_read_exception">读取异常</string>
 
     <string name="tab_creality">创想</string>
+    <string name="config_bambu_feature">拓竹 RFID</string>
+    <string name="config_bambu_feature_desc">开启拓竹耗材标签复制页面</string>
     <string name="config_creality_feature">创想三维 RFID</string>
     <string name="config_creality_feature_desc">开启创想三维耗材 RFID 读写页面</string>
     <string name="tab_snapmaker">快造</string>

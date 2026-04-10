@@ -15,7 +15,7 @@
     <string name="tab_inventory">库存</string>
     <string name="tab_data">数据</string>
     <string name="tab_write">写入</string>
-    <string name="tab_tag">复制</string>
+    <string name="tab_tag">拓竹</string>
     <string name="tab_misc">配置</string>
 
     <string name="voice_status_prefix">语音%1$s</string>
@@ -189,6 +189,8 @@
     <string name="misc_clear_share_tags_title">确认清空标签数据库</string>
     <string name="misc_clear_share_tags_message">将清空数据库中的全部标签记录，此操作不可恢复。确定继续吗？</string>
     <string name="misc_force_overwrite_import">强制覆盖导入标签</string>
+    <string name="config_auto_detect_brand">自动识别 RFID</string>
+    <string name="config_auto_detect_brand_desc">刷卡时自动检测品牌并跳转到对应识别页（拓竹/创想/快造）</string>
     <string name="config_inventory_feature">库存与数据功能</string>
     <string name="config_inventory_feature_desc">开启后显示库存和数据页面</string>
     <string name="config_hide_copied_tags">隐藏已复制标签</string>
@@ -257,6 +259,8 @@
     <string name="user_agreement_decline">不同意并退出</string>
 
     <string name="tab_creality">创想</string>
+    <string name="config_bambu_feature">拓竹 RFID</string>
+    <string name="config_bambu_feature_desc">开启拓竹耗材标签复制页面</string>
     <string name="config_creality_feature">创想三维 RFID</string>
     <string name="config_creality_feature_desc">开启创想三维耗材 RFID 读写页面</string>
     <string name="creality_scan_hint">贴上标签自动读取</string>

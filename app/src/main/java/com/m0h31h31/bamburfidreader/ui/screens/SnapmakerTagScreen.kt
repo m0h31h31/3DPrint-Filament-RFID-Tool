@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -94,24 +95,33 @@ private fun snapFullTypeName(mainType: Int, subType: Int): String {
     return if (sub == "Reserved" || sub.startsWith("Unknown")) main else "$main $sub"
 }
 
-private data class SnapCategoryGroup(
-    val materialType: String,
+private data class SnapColorGroup(
+    val rgb1: Int,
     val items: List<SnapmakerShareTagItem>
 )
 
-private fun buildSnapCategoryGroups(items: List<SnapmakerShareTagItem>): List<SnapCategoryGroup> =
+private data class SnapTypeCategory(
+    val typeKey: String,
+    val colorGroups: List<SnapColorGroup>
+)
+
+private fun buildSnapTypeCategoryGroups(items: List<SnapmakerShareTagItem>): List<SnapTypeCategory> =
     items
-        .groupBy { snapMainTypeName(it.mainType).ifBlank { "未知" } }
+        .groupBy { snapFullTypeName(it.mainType, it.subType).ifBlank { "未知" } }
         .entries
         .sortedBy { it.key }
-        .map { (type, groupItems) ->
-            SnapCategoryGroup(
-                materialType = type,
-                items = groupItems.sortedWith(
-                    compareBy<SnapmakerShareTagItem> { snapSubTypeName(it.subType).ifBlank { "\uFFFF" } }
-                        .thenByDescending { it.mfDate.ifBlank { "" } }
-                )
-            )
+        .map { (typeKey, typeItems) ->
+            val colorGroups = typeItems
+                .groupBy { it.rgb1 }
+                .entries
+                .sortedBy { it.key }
+                .map { (rgb, colorItems) ->
+                    SnapColorGroup(
+                        rgb1 = rgb,
+                        items = colorItems.sortedByDescending { it.mfDate.ifBlank { "" } }
+                    )
+                }
+            SnapTypeCategory(typeKey = typeKey, colorGroups = colorGroups)
         }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -166,7 +176,7 @@ fun SnapmakerTagScreen(
         )
     }
 
-    val categories = remember(filteredItems) { buildSnapCategoryGroups(filteredItems) }
+    val categories = remember(filteredItems) { buildSnapTypeCategoryGroups(filteredItems) }
     val selectedItem = items.firstOrNull { it.uid == selectedUid }
 
     Surface(modifier = modifier.fillMaxSize().neuBackground(), color = MaterialTheme.colorScheme.background) {
@@ -277,8 +287,8 @@ fun SnapmakerTagScreen(
                             modifier = Modifier.padding(top = 4.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            Text("请使用空白快造标签卡写入", fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold)
-                            Text("写入后将无法恢复为空白卡", fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                            Text("标签需要紧贴手机NFC区域,写入过程中不要移动", fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("写入可能失败!作者不对任何后果负责!", fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -407,16 +417,6 @@ private fun SnapTagListItem(
             ) {
                 Box(modifier = Modifier.width(4.dp).height(36.dp).clip(RoundedCornerShape(999.dp))
                     .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)))
-                // Color swatch
-                if (item.rgb1 != 0) {
-                    Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF000000 or item.rgb1.toLong()))
-                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), CircleShape)
-                    )
-                }
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -436,6 +436,16 @@ private fun SnapTagListItem(
                         fontSize = 12.sp, color = subtitleColor
                     )
                 }
+                // Color swatch on the right
+                if (item.rgb1 != 0) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF000000 or item.rgb1.toLong()))
+                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                    )
+                }
             }
         }
     }
@@ -443,142 +453,221 @@ private fun SnapTagListItem(
 
 // ── Category view ─────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun SnapColorSwatchTile(
+    group: SnapColorGroup,
+    onTap: () -> Unit
+) {
+    val swatchShape = RoundedCornerShape(10.dp)
+    val bgColor = if (group.rgb1 != 0) Color(0xFF000000 or group.rgb1.toLong())
+                  else MaterialTheme.colorScheme.surfaceVariant
+
+    Box(
+        modifier = Modifier
+            .width(60.dp)
+            .height(58.dp)
+            .clip(swatchShape)
+            .background(bgColor)
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), swatchShape)
+            .clickable { onTap() }
+    ) {
+        if (group.items.size > 1) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(3.dp)
+                    .size(16.dp)
+                    .background(Color(0xAA000000), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "${group.items.size}",
+                    fontSize = 8.sp,
+                    lineHeight = 8.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.wrapContentSize(Alignment.Center)
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SnapUidSelectionDialog(
+    typeKey: String,
+    group: SnapColorGroup,
+    selectedUid: String?,
+    onSelect: (SnapmakerShareTagItem) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            tonalElevation = 6.dp,
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (group.rgb1 != 0) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF000000 or group.rgb1.toLong()))
+                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        )
+                    }
+                    Text(
+                        text = typeKey,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                val sortedItems = remember(group.items) {
+                    group.items.sortedByDescending { it.mfDate.ifBlank { "" } }
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 200.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        sortedItems.forEach { item ->
+                            val isSelected = item.uid == selectedUid
+                            val chipBg = if (isSelected) MaterialTheme.colorScheme.primary
+                                         else MaterialTheme.colorScheme.surfaceVariant
+                            val chipText = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                           else MaterialTheme.colorScheme.onSurfaceVariant
+                            Box(
+                                modifier = Modifier
+                                    .background(chipBg, RoundedCornerShape(6.dp))
+                                    .clickable { onSelect(item); onDismiss() }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = item.uid,
+                                        fontSize = 11.sp,
+                                        color = chipText,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        lineHeight = 13.sp
+                                    )
+                                    if (item.mfDate.isNotBlank()) {
+                                        Text(
+                                            text = item.mfDate,
+                                            fontSize = 9.sp,
+                                            color = chipText.copy(alpha = 0.75f),
+                                            lineHeight = 11.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SnapCategoryView(
-    categories: List<SnapCategoryGroup>,
+    categories: List<SnapTypeCategory>,
     selectedUid: String?,
     expandedCategoryKeys: List<String>,
     onExpandedCategoryKeysChange: (List<String>) -> Unit,
     onSelect: (SnapmakerShareTagItem) -> Unit
 ) {
-    var dialogGroup by remember { mutableStateOf<SnapCategoryGroup?>(null) }
+    var openDialog by remember { mutableStateOf<Pair<String, SnapColorGroup>?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        categories.forEach { category ->
-            val key = category.materialType
-            val isExpanded = key in expandedCategoryKeys
+        items(categories, key = { it.typeKey }) { category ->
+            val catExpanded = category.typeKey in expandedCategoryKeys
 
-            stickyHeader(key = "header_$key") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.background)
-                        .clickable {
-                            onExpandedCategoryKeysChange(
-                                if (isExpanded) expandedCategoryKeys - key
-                                else expandedCategoryKeys + key
-                            )
-                        }
-                        .padding(vertical = 6.dp, horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            Column {
+                NeuPanel(
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        val updated = if (catExpanded) expandedCategoryKeys - category.typeKey
+                                      else expandedCategoryKeys + category.typeKey
+                        onExpandedCategoryKeysChange(updated)
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = category.materialType,
+                            text = category.typeKey,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            modifier = Modifier.weight(1f)
                         )
                         Text(
-                            text = "${category.items.size}",
-                            fontSize = 11.sp,
+                            text = "(${category.colorGroups.sumOf { it.items.size }})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = if (catExpanded) "▲" else "▼",
+                            fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Text(
-                        text = if (isExpanded) "▲" else "▼",
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
                 }
-            }
 
-            if (isExpanded) {
-                item(key = "items_$key") {
-                    // Show items as UID chips grouped by mfDate
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                AnimatedVisibility(visible = catExpanded, enter = expandVertically(), exit = shrinkVertically()) {
+                    BoxWithConstraints(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 4.dp)
                     ) {
-                        // Group by vendor for sub-grouping inside category
-                        val byVendor = category.items.groupBy { it.vendor.ifBlank { "-" } }
-                        byVendor.forEach { (vendor, vendorItems) ->
-                            if (byVendor.size > 1) {
-                                Text(
-                                    text = vendor,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(start = 4.dp, top = 2.dp)
-                                )
-                            }
-                            @OptIn(ExperimentalLayoutApi::class)
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                vendorItems.forEach { item ->
-                                    val isSelected = item.uid == selectedUid
-                                    val chipBg = if (isSelected) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surfaceVariant
-                                    val chipText = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                                    Box(
-                                        modifier = Modifier
-                                            .background(chipBg, RoundedCornerShape(6.dp))
-                                            .clickable { onSelect(item) }
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            // Color swatch + subtype row
-                                            Row(
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                if (item.rgb1 != 0) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(10.dp)
-                                                            .clip(CircleShape)
-                                                            .background(Color(0xFF000000 or item.rgb1.toLong()))
-                                                            .border(0.5.dp, chipText.copy(alpha = 0.3f), CircleShape)
-                                                    )
-                                                }
-                                                val subName = snapSubTypeName(item.subType)
-                                                if (subName != "Reserved" && !subName.startsWith("Unknown")) {
-                                                    Text(
-                                                        text = subName,
-                                                        fontSize = 9.sp,
-                                                        color = chipText.copy(alpha = 0.85f),
-                                                        lineHeight = 11.sp,
-                                                        fontWeight = FontWeight.Medium
-                                                    )
-                                                }
-                                            }
-                                            Text(
-                                                text = item.uid,
-                                                fontSize = 11.sp,
-                                                color = chipText,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                lineHeight = 13.sp
+                        val cellWidth = 60.dp
+                        val minGap = 4.dp
+                        val columns = ((maxWidth + minGap) / (cellWidth + minGap))
+                            .toInt().coerceAtLeast(1)
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            category.colorGroups.chunked(columns).forEach { rowGroups ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    rowGroups.forEach { group ->
+                                        Box(modifier = Modifier.width(cellWidth), contentAlignment = Alignment.Center) {
+                                            SnapColorSwatchTile(
+                                                group = group,
+                                                onTap = { openDialog = category.typeKey to group }
                                             )
-                                            if (item.mfDate.isNotBlank()) {
-                                                Text(
-                                                    text = item.mfDate,
-                                                    fontSize = 9.sp,
-                                                    color = chipText.copy(alpha = 0.75f),
-                                                    lineHeight = 11.sp
-                                                )
-                                            }
                                         }
+                                    }
+                                    repeat(columns - rowGroups.size) {
+                                        Spacer(modifier = Modifier.width(cellWidth))
                                     }
                                 }
                             }
@@ -587,5 +676,16 @@ private fun SnapCategoryView(
                 }
             }
         }
+    }
+
+    val dialogData = openDialog
+    if (dialogData != null) {
+        SnapUidSelectionDialog(
+            typeKey = dialogData.first,
+            group = dialogData.second,
+            selectedUid = selectedUid,
+            onSelect = onSelect,
+            onDismiss = { openDialog = null }
+        )
     }
 }
