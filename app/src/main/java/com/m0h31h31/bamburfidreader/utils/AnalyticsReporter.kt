@@ -6,6 +6,14 @@ import com.m0h31h31.bamburfidreader.BuildConfig
 import org.json.JSONObject
 import java.util.UUID
 
+data class UpdateInfo(
+    val versionCode: Int,
+    val versionName: String,
+    val downloadUrl: String,
+    val changelog: String,
+    val forceUpdate: Boolean
+)
+
 object AnalyticsReporter {
     private const val PREFS_NAME = "analytics_prefs"
     private const val KEY_INSTALL_ID = "install_id"
@@ -106,6 +114,34 @@ object AnalyticsReporter {
         val ok = NetworkUtils.postJson(endpoint, payload, apiKeyHeaders())
         com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.saveNickname result=$ok")
         return ok
+    }
+
+    /**
+     * 查询服务端最新版本。若有新版本（versionCode 大于当前）则返回 UpdateInfo，否则返回 null。
+     */
+    suspend fun checkForUpdate(context: Context): UpdateInfo? {
+        val cfg = ConfigManager.getUpdateEndpoint(context)
+        val endpoint = cfg.value
+        com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.checkForUpdate endpoint=$endpoint")
+        if (endpoint.isBlank()) return null
+        val json = NetworkUtils.getJson(endpoint, apiKeyHeaders()) ?: return null
+        val remoteVersionCode = json.optInt("versionCode", 0)
+        if (remoteVersionCode <= 0) return null
+        val downloadUrl = json.optString("downloadUrl", "")
+        if (downloadUrl.isBlank()) return null
+        val currentVersionCode = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode.toInt()
+        } catch (_: Exception) { return null }
+        if (remoteVersionCode <= currentVersionCode) return null
+        return UpdateInfo(
+            versionCode = remoteVersionCode,
+            versionName = json.optString("versionName", ""),
+            downloadUrl = downloadUrl,
+            changelog   = json.optString("changelog", ""),
+            forceUpdate = json.optBoolean("forceUpdate", false)
+        ).also {
+            com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.checkForUpdate: new version ${it.versionName} (code=${it.versionCode})")
+        }
     }
 
     suspend fun reportInstallAndLaunch(context: Context) {

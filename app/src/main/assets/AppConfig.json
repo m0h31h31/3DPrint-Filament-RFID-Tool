@@ -24,6 +24,10 @@
         "type": "url",
         "value": "https://brr.jacki.cn/api/nickname"
     },
+    "updateEndpoint": {
+        "type": "url",
+        "value": "https://brr.jacki.cn/api/update/latest"
+    },
     "logoLinks": {
         "makerworld": {
             "type": "scheme",

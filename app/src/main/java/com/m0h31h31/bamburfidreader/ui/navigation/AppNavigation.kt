@@ -1,22 +1,29 @@
 package com.m0h31h31.bamburfidreader.ui.navigation
 
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
@@ -177,6 +184,10 @@ fun AppNavigation(
     readerBrandStatus: String = "",
     anomalyUids: Map<String, Int> = emptyMap(),
     onReportAnomaly: (trayUid: String, cardUid: String) -> Unit = { _, _ -> },
+    pendingUpdateInfo: com.m0h31h31.bamburfidreader.utils.UpdateInfo? = null,
+    isDownloadingUpdate: Boolean = false,
+    onStartUpdate: (com.m0h31h31.bamburfidreader.utils.UpdateInfo) -> Unit = {},
+    onDismissUpdate: () -> Unit = {},
 ) {
     val resolvedUiStyle = LocalAppUiStyle.current
     val navController = rememberNavController()
@@ -289,6 +300,33 @@ fun AppNavigation(
             .neuBackground(),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
+            Column {
+            // 更新下载进度横幅
+            AnimatedVisibility(
+                visible = isDownloadingUpdate,
+                enter = expandVertically(expandFrom = Alignment.Top),
+                exit = shrinkVertically(shrinkTowards = Alignment.Top)
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text(
+                            text = stringResource(R.string.update_downloading),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                        )
+                    }
+                }
+            }
             if (resolvedUiStyle == AppUiStyle.MIUIX) {
                 key(inventoryEnabled, bambuTagEnabled, crealityEnabled) {
                 Box(
@@ -369,6 +407,7 @@ fun AppNavigation(
                 }
                 } // key
             }
+            } // Column
         }
     ) { innerPadding ->
         NavHost(
@@ -520,7 +559,11 @@ fun AppNavigation(
                                 onForceOverwriteImportChange = onForceOverwriteImportChange,
                                 formatInProgress = formatInProgress,
                                 scrollToNotice = scrollToNotice,
-                                onScrollToNoticeDone = onScrollToNoticeDone
+                                onScrollToNoticeDone = onScrollToNoticeDone,
+                                pendingUpdateInfo = pendingUpdateInfo,
+                                isDownloadingUpdate = isDownloadingUpdate,
+                                onStartUpdate = onStartUpdate,
+                                onDismissUpdate = onDismissUpdate
                             )
                         }
         }

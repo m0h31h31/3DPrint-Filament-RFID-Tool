@@ -22,6 +22,7 @@ object ConfigManager {
     private const val DEFAULT_ANOMALY_REPORT_ENDPOINT = "https://brr.jacki.cn/api/anomaly"
     private const val DEFAULT_ANOMALY_UIDS_ENDPOINT = "https://brr.jacki.cn/api/anomaly/uids"
     private const val DEFAULT_NICKNAME_ENDPOINT = "https://brr.jacki.cn/api/nickname"
+    private const val DEFAULT_UPDATE_ENDPOINT = "https://brr.jacki.cn/api/update/latest"
 
     // 文件路径
     private const val FILAMENTS_COLOR_CODES_FILE = "filaments_color_codes.json"
@@ -62,27 +63,13 @@ object ConfigManager {
     }
     
     /**
-     * 检查AppConfig
+     * 检查并更新本地 AppConfig（仅同步远程配置，版本检查由后端 /api/update/latest 负责）
      */
     private suspend fun checkAppConfig(context: Context, onUpdateAvailable: (String, () -> Unit) -> Unit) {
         try {
             val remoteContent = NetworkUtils.fetchFile(APP_CONFIG_PRIMARY, APP_CONFIG_BACKUP)
             if (remoteContent != null) {
-                val remoteJson = JSONObject(String(remoteContent))
-                val remoteVersion = remoteJson.optString("version", "")
-                val message = remoteJson.optString("message", "")
-                
-                // 保存到本地
                 saveFile(context, APP_CONFIG_FILE, remoteContent)
-                
-                // 版本检查逻辑
-                val currentVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName
-                if (remoteVersion != currentVersion && remoteVersion.isNotEmpty()) {
-                    // 版本不同，提示用户更新
-                    withContext(Dispatchers.Main) {
-                        onUpdateAvailable("版本更新请到原地址下载") {}
-                    }
-                }
             } else {
                 com.m0h31h31.bamburfidreader.logDebug("Failed to fetch AppConfig")
             }
@@ -372,6 +359,19 @@ object ConfigManager {
         } catch (e: Exception) {
             com.m0h31h31.bamburfidreader.logDebug("Error checking creality_material_list.json: ${e.message}")
         }
+    }
+
+    fun getUpdateEndpoint(context: Context): AppLinkConfig {
+        val defaultValue = AppLinkConfig(type = "url", value = DEFAULT_UPDATE_ENDPOINT)
+        val configContent = getLocalConfig(context, APP_CONFIG_FILE) ?: return defaultValue
+        return (try {
+            val json = JSONObject(configContent)
+            parseLinkConfig(json, "updateEndpoint", null)?.takeIf {
+                it.type.equals("url", ignoreCase = true) && it.value.isNotBlank()
+            }
+        } catch (e: Exception) {
+            null
+        }) ?: defaultValue
     }
 
     private fun parseLinkConfig(

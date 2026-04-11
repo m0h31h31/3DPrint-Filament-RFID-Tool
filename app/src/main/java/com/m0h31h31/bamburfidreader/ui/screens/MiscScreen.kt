@@ -222,6 +222,10 @@ fun MiscScreen(
     onTagViewModeChange: (String) -> Unit = {},
     scrollToNotice: Boolean = false,
     onScrollToNoticeDone: () -> Unit = {},
+    pendingUpdateInfo: com.m0h31h31.bamburfidreader.utils.UpdateInfo? = null,
+    isDownloadingUpdate: Boolean = false,
+    onStartUpdate: (com.m0h31h31.bamburfidreader.utils.UpdateInfo) -> Unit = {},
+    onDismissUpdate: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1427,11 +1431,45 @@ fun MiscScreen(
                                     versionEggVisible = true
                                 }
                         ) {
-                            Text(
-                                text = stringResource(R.string.misc_version_format, appVersion),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = versionTextColor
-                            )
+                            androidx.compose.foundation.layout.Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.misc_version_format, appVersion),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = versionTextColor
+                                )
+                                when {
+                                    isDownloadingUpdate -> Surface(
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier.padding(start = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.update_downloading),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onTertiary
+                                        )
+                                    }
+                                    pendingUpdateInfo != null -> Surface(
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier
+                                            .clickable { onStartUpdate(pendingUpdateInfo!!) }
+                                            .padding(start = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.update_badge),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onError
+                                        )
+                                    }
+                                }
+                            }
                         }
                         androidx.compose.animation.AnimatedVisibility(
                             visible = versionEggVisible,

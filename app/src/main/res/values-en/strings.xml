@@ -321,6 +321,17 @@
     <string name="misc_nickname_saved">Nickname saved</string>
     <string name="misc_nickname_save_failed">Failed to save nickname, please try again later</string>
     <string name="misc_nickname_invalid">Nickname must be 1–16 characters</string>
+    <string name="update_dialog_title">New version available: %s</string>
+    <string name="update_dialog_no_changelog">No release notes available</string>
+    <string name="update_action_now">Update now</string>
+    <string name="update_action_later">Remind me later</string>
+    <string name="update_download_notification_title">BambuRfidReader update</string>
+    <string name="update_downloading">Downloading new version…</string>
+    <string name="update_need_permission">Please allow installation from unknown sources in system settings first</string>
+    <string name="update_badge">Update available</string>
+    <string name="update_check_btn">Check for updates</string>
+    <string name="update_is_latest">Already up to date</string>
+    <string name="update_check_failed">Update check failed, please try again later</string>
     <string name="auto_share_disable_confirm_title">Confirm Disable</string>
     <string name="auto_share_disable_confirm_message">After successfully sharing tags, you can enjoy shared data from others. Without sharing, you cannot access others\' shared data. Are you sure you want to disable it?</string>
     <string name="config_auto_share_tag">Auto Share Tags</string>

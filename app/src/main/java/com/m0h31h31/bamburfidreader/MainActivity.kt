@@ -1,7 +1,11 @@
 package com.m0h31h31.bamburfidreader
 
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.media.AudioManager
@@ -18,6 +22,7 @@ import android.os.Environment
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -57,7 +62,9 @@ import com.m0h31h31.bamburfidreader.ui.theme.ColorPalette
 import com.m0h31h31.bamburfidreader.ui.theme.ThemeMode
 import com.m0h31h31.bamburfidreader.ui.theme.BambuRfidReaderTheme
 import com.m0h31h31.bamburfidreader.util.normalizeColorValue
+import androidx.core.content.FileProvider
 import com.m0h31h31.bamburfidreader.utils.AnalyticsReporter
+import com.m0h31h31.bamburfidreader.utils.UpdateInfo
 import com.m0h31h31.bamburfidreader.utils.ConfigManager
 import java.io.File
 import java.io.FileInputStream
@@ -748,6 +755,9 @@ class MainActivity : ComponentActivity() {
     private var shareRefreshStatusClearJob: Job? = null
     private var miscStatusMessage by mutableStateOf("")
     private var anomalyUids by mutableStateOf<Map<String, Int>>(emptyMap())
+    private var pendingUpdateInfo by mutableStateOf<UpdateInfo?>(null)
+    private var isDownloadingUpdate by mutableStateOf(false)
+    private var updateDownloadId = -1L
     private var writeToolStatusMessage by mutableStateOf("")
     private var selfTagCount by mutableStateOf(0)
     private var debugInfoDialog: android.app.AlertDialog? = null
@@ -1245,6 +1255,17 @@ class MainActivity : ComponentActivity() {
         
         // 检查并更新配置文件
         checkAndUpdateConfig()
+
+        // 检查在线更新
+        checkForUpdateAsync()
+
+        // 注册下载完成广播（ContextCompat 兼容 API 28-）
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            updateDownloadReceiver,
+            IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+        )
         
         setContent {
             BambuRfidReaderTheme(themeMode = themeMode, uiStyle = uiStyle, colorPalette = colorPalette) {
@@ -1487,7 +1508,11 @@ class MainActivity : ComponentActivity() {
                     onDismissCModifyRecovery = { cModifyRecoveryInfo = null },
                     onStartNdefWrite = { request ->
                         enqueueNdefWriteTask(request)
-                    }
+                    },
+                    pendingUpdateInfo = pendingUpdateInfo,
+                    isDownloadingUpdate = isDownloadingUpdate,
+                    onStartUpdate = { info -> startUpdate(info) },
+                    onDismissUpdate = { pendingUpdateInfo = null }
                 )
                 // 重置导航标志
                 if (shouldNavigateToReader) {
@@ -1671,6 +1696,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try { unregisterReceiver(updateDownloadReceiver) } catch (_: Exception) {}
         logEvent("应用退出，准备打包日志")
         filamentDbHelper?.close()
         tts?.stop()
@@ -2976,6 +3002,80 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) {
                 // 静默失败，不影响主流程
             }
+        }
+    }
+
+    // ── 在线更新 ──────────────────────────────────────────────────────────────
+
+    private val updateDownloadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+            if (id != -1L && id == updateDownloadId) {
+                installDownloadedApk(id)
+            }
+        }
+    }
+
+    private fun checkForUpdateAsync() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val info = AnalyticsReporter.checkForUpdate(applicationContext) ?: return@launch
+                withContext(Dispatchers.Main) {
+                    pendingUpdateInfo = info
+                    startUpdate(info)   // 检测到新版本立即自动下载
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun startUpdate(info: UpdateInfo) {
+        if (!packageManager.canRequestPackageInstalls()) {
+            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                .setData(android.net.Uri.parse("package:$packageName"))
+            startActivity(intent)
+            return
+        }
+        startApkDownload(info.downloadUrl)
+    }
+
+    private fun startApkDownload(downloadUrl: String) {
+        if (isDownloadingUpdate) return
+        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val dest = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "BambuRfidReader_update.apk")
+        if (dest.exists()) dest.delete()
+        val request = DownloadManager.Request(android.net.Uri.parse(downloadUrl))
+            .setTitle(getString(R.string.update_download_notification_title))
+            .setDescription(getString(R.string.update_downloading))
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationUri(android.net.Uri.fromFile(dest))
+            .setMimeType("application/vnd.android.package-archive")
+        updateDownloadId = dm.enqueue(request)
+        isDownloadingUpdate = true
+        Toast.makeText(this, getString(R.string.update_downloading), Toast.LENGTH_LONG).show()
+        logDebug("Update download enqueued id=$updateDownloadId url=$downloadUrl")
+    }
+
+    private fun installDownloadedApk(downloadId: Long) {
+        isDownloadingUpdate = false
+        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val query = DownloadManager.Query().setFilterById(downloadId)
+        val cursor = dm.query(query)
+        val success = cursor.use {
+            it.moveToFirst() &&
+                it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) == DownloadManager.STATUS_SUCCESSFUL
+        }
+        if (!success) { logDebug("Update download failed or not found"); return }
+        val apkFile = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "BambuRfidReader_update.apk")
+        if (!apkFile.exists()) { logDebug("APK not found: ${apkFile.absolutePath}"); return }
+        try {
+            val uri = FileProvider.getUriForFile(this, "$packageName.update_provider", apkFile)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            logDebug("Install intent failed: ${e.message}")
         }
     }
 
