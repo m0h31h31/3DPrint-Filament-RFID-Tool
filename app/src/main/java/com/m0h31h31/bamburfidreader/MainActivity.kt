@@ -68,6 +68,9 @@ import com.m0h31h31.bamburfidreader.utils.UpdateInfo
 import com.m0h31h31.bamburfidreader.utils.ConfigManager
 import java.io.File
 import java.io.FileInputStream
+import java.security.MessageDigest
+import net.lingala.zip4j.ZipFile as Zip4jFile
+import net.lingala.zip4j.exception.ZipException as Zip4jException
 import java.io.IOException
 import java.util.UUID
 import java.text.SimpleDateFormat
@@ -1968,6 +1971,44 @@ class MainActivity : ComponentActivity() {
         return uri
     }
 
+    /** 计算标签包 ZIP 密码（与服务器算法一致：SHA-256(install_id:TAG_PACKAGE_KEY)[:16]）*/
+    private fun computeTagZipPassword(): String {
+        val installId = com.m0h31h31.bamburfidreader.utils.AnalyticsReporter.getInstallId(this)
+        val raw = "$installId:${BuildConfig.TAG_PACKAGE_KEY}"
+        val digest = MessageDigest.getInstance("SHA-256").digest(raw.toByteArray())
+        return digest.take(8).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+
+    /**
+     * 将 URI 内容复制到临时文件，用 zip4j 打开（自动处理加密/非加密），
+     * 返回 (entryName, bytes) 列表。处理完成后删除临时文件。
+     */
+    private fun extractZipEntries(uri: Uri): List<Pair<String, ByteArray>> {
+        val tmp = File(cacheDir, "import_${System.currentTimeMillis()}.zip")
+        try {
+            contentResolver.openInputStream(uri)?.use { inp ->
+                tmp.outputStream().use { inp.copyTo(it) }
+            }
+            val zipFile = Zip4jFile(tmp)
+            if (zipFile.isEncrypted) {
+                zipFile.setPassword(computeTagZipPassword().toCharArray())
+            }
+            val entries = mutableListOf<Pair<String, ByteArray>>()
+            for (header in zipFile.fileHeaders) {
+                if (!header.isDirectory) {
+                    val bytes = zipFile.getInputStream(header).use { it.readBytes() }
+                    entries.add(Pair(header.fileName, bytes))
+                }
+            }
+            return entries
+        } catch (e: Zip4jException) {
+            logDebug("ZIP 解压失败（密码错误或格式不支持）: ${e.message}")
+            return emptyList()
+        } finally {
+            tmp.delete()
+        }
+    }
+
     private fun importTagPackageFromZipUri(uri: Uri): String {
         val dbHelper = filamentDbHelper ?: return "数据库不可用"
         val db = dbHelper.writableDatabase
@@ -1984,86 +2025,52 @@ class MainActivity : ComponentActivity() {
                 .mapNotNull { it.trayUid?.uppercase(Locale.US)?.ifBlank { null } }
                 .toMutableSet()
 
-            contentResolver.openInputStream(uri)?.use { input ->
-                ZipInputStream(input).use { zip ->
-                    var entry = zip.nextEntry
-                    while (entry != null) {
-                        if (!entry.isDirectory && entry.name.lowercase(Locale.US).endsWith(".txt")) {
-                            val incomingUid = File(entry.name).nameWithoutExtension.uppercase(Locale.US)
-                            val alreadyExists = incomingUid.isNotBlank() && existingFileUidSet.contains(incomingUid)
+            val zipEntries = extractZipEntries(uri)
+            if (zipEntries.isEmpty() && !cacheDir.listFiles()?.any { it.name.startsWith("import_") } ?: false) {
+                return "读取标签包失败（文件损坏或密码错误）"
+            }
+            for ((entryName, bytes) in zipEntries) {
+                if (!entryName.lowercase(Locale.US).endsWith(".txt")) continue
+                val incomingUid = File(entryName).nameWithoutExtension.uppercase(Locale.US)
+                val alreadyExists = incomingUid.isNotBlank() && existingFileUidSet.contains(incomingUid)
 
-                            // 读取字节（ZipInputStream 不支持重置，必须先读出）
-                            val bytes = zip.readBytes()
+                if (alreadyExists && !forceOverwriteImport) { skippedCount++; continue }
 
-                            if (alreadyExists && !forceOverwriteImport) {
-                                skippedCount++
-                                zip.closeEntry()
-                                entry = zip.nextEntry
-                                continue
-                            }
+                val content = String(bytes, Charsets.UTF_8)
+                val rawBlocks = parseHexTagFileStrict(content)
+                if (rawBlocks == null) { invalidCount++; continue }
+                if (!isValidBambuTag(rawBlocks)) { invalidCount++; continue }
 
-                            // 校验格式：严格要求 64 行 × 32 字符
-                            val content = String(bytes, Charsets.UTF_8)
-                            val rawBlocks = parseHexTagFileStrict(content)
-                            if (rawBlocks == null) {
-                                invalidCount++
-                                zip.closeEntry()
-                                entry = zip.nextEntry
-                                continue
-                            }
-
-                            // 校验所有扇区尾块权限位和用户数据是否为 87878769
-                            if (!isValidBambuTag(rawBlocks)) {
-                                invalidCount++
-                                zip.closeEntry()
-                                entry = zip.nextEntry
-                                continue
-                            }
-
-                            // 解析预览数据，获取 tray_uid 和颜色信息
-                            val preview = NfcTagProcessor.parseForPreview(rawBlocks, filamentDbHelper) { }
-                            val trayUid = preview.trayUidHex.trim()
-
-                            // 检查 tray_uid 是否已在 DB 中存在（物理标签去重）
-                            if (trayUid.isNotBlank() && existingTrayUidSet.contains(trayUid.uppercase())) {
-                                skippedCount++
-                                zip.closeEntry()
-                                entry = zip.nextEntry
-                                continue
-                            }
-
-                            // 强制覆盖：删除旧 DB 记录
-                            if (alreadyExists && forceOverwriteImport && incomingUid.isNotBlank()) {
-                                dbHelper.deleteShareTagByFileUid(db, incomingUid)
-                            }
-
-                            // 归一化 raw_data 写入 DB
-                            val normalized = content.trim().lines()
-                                .map { it.trim() }.filter { it.isNotBlank() }.take(64).joinToString("\n")
-                            val productionDate = extractProductionDate(rawBlocks)
-                            dbHelper.insertShareTag(
-                                db,
-                                fileUid = incomingUid,
-                                trayUid = trayUid.ifBlank { null },
-                                materialType = preview.displayData.type.ifBlank { null },
-                                colorUid = preview.displayData.colorCode.ifBlank { null },
-                                colorName = preview.displayData.colorName.ifBlank { null },
-                                colorType = preview.displayData.colorType.ifBlank { null },
-                                colorValues = preview.displayData.colorValues.joinToString(",").ifBlank { null },
-                                rawData = normalized,
-                                productionDate = productionDate
-                            )
-
-                            extractedCount++
-                            if (alreadyExists && forceOverwriteImport) overwrittenCount++
-                            if (incomingUid.isNotBlank()) existingFileUidSet.add(incomingUid)
-                            if (trayUid.isNotBlank()) existingTrayUidSet.add(trayUid.uppercase())
-                        }
-                        zip.closeEntry()
-                        entry = zip.nextEntry
-                    }
+                val preview = NfcTagProcessor.parseForPreview(rawBlocks, filamentDbHelper) { }
+                val trayUid = preview.trayUidHex.trim()
+                if (trayUid.isNotBlank() && existingTrayUidSet.contains(trayUid.uppercase())) {
+                    skippedCount++; continue
                 }
-            } ?: return "读取标签包失败"
+
+                if (alreadyExists && forceOverwriteImport && incomingUid.isNotBlank()) {
+                    dbHelper.deleteShareTagByFileUid(db, incomingUid)
+                }
+
+                val normalized = content.trim().lines()
+                    .map { it.trim() }.filter { it.isNotBlank() }.take(64).joinToString("\n")
+                val productionDate = extractProductionDate(rawBlocks)
+                dbHelper.insertShareTag(
+                    db,
+                    fileUid = incomingUid,
+                    trayUid = trayUid.ifBlank { null },
+                    materialType = preview.displayData.type.ifBlank { null },
+                    colorUid = preview.displayData.colorCode.ifBlank { null },
+                    colorName = preview.displayData.colorName.ifBlank { null },
+                    colorType = preview.displayData.colorType.ifBlank { null },
+                    colorValues = preview.displayData.colorValues.joinToString(",").ifBlank { null },
+                    rawData = normalized,
+                    productionDate = productionDate
+                )
+                extractedCount++
+                if (alreadyExists && forceOverwriteImport) overwrittenCount++
+                if (incomingUid.isNotBlank()) existingFileUidSet.add(incomingUid)
+                if (trayUid.isNotBlank()) existingTrayUidSet.add(trayUid.uppercase())
+            }
 
             when {
                 extractedCount == 0 && skippedCount == 0 && invalidCount == 0 ->
@@ -2105,62 +2112,37 @@ class MainActivity : ComponentActivity() {
             val existingUids = dbHelper.getAllSnapmakerShareTagUids(db)
             val existingUidSet = existingUids.map { it.uppercase(Locale.US) }.toMutableSet()
 
-            contentResolver.openInputStream(uri)?.use { input ->
-                ZipInputStream(input).use { zip ->
-                    var entry = zip.nextEntry
-                    while (entry != null) {
-                        if (!entry.isDirectory && entry.name.lowercase(Locale.US).endsWith(".txt")) {
-                            val incomingUid = File(entry.name).nameWithoutExtension.uppercase(Locale.US)
-                            val alreadyExists = incomingUid.isNotBlank() && existingUidSet.contains(incomingUid)
-                            val bytes = zip.readBytes()
+            val zipEntries = extractZipEntries(uri)
+            for ((entryName, bytes) in zipEntries) {
+                if (!entryName.lowercase(Locale.US).endsWith(".txt")) continue
+                val incomingUid = File(entryName).nameWithoutExtension.uppercase(Locale.US)
+                val alreadyExists = incomingUid.isNotBlank() && existingUidSet.contains(incomingUid)
+                if (alreadyExists) { skippedCount++; continue }
 
-                            if (alreadyExists) {
-                                skippedCount++
-                                zip.closeEntry()
-                                entry = zip.nextEntry
-                                continue
-                            }
+                val content = String(bytes, Charsets.UTF_8)
+                val rawBlocks = parseHexTagFileStrict(content)
+                if (rawBlocks == null) { invalidCount++; continue }
+                if (!isValidSnapmakerTag(rawBlocks)) { invalidCount++; continue }
 
-                            val content = String(bytes, Charsets.UTF_8)
-                            val rawBlocks = parseHexTagFileStrict(content)
-                            if (rawBlocks == null) {
-                                invalidCount++
-                                zip.closeEntry()
-                                entry = zip.nextEntry
-                                continue
-                            }
+                val fields = parseSnapmakerShareFields(rawBlocks)
+                val normalized = content.trim().lines()
+                    .map { it.trim() }.filter { it.isNotBlank() }.take(64).joinToString("\n")
 
-                            if (!isValidSnapmakerTag(rawBlocks)) {
-                                invalidCount++
-                                zip.closeEntry()
-                                entry = zip.nextEntry
-                                continue
-                            }
-
-                            val fields = parseSnapmakerShareFields(rawBlocks)
-                            val normalized = content.trim().lines()
-                                .map { it.trim() }.filter { it.isNotBlank() }.take(64).joinToString("\n")
-
-                            dbHelper.insertSnapmakerShareTag(
-                                db,
-                                uid = incomingUid,
-                                vendor = fields.vendor,
-                                manufacturer = fields.manufacturer,
-                                mainType = fields.mainType,
-                                diameter = fields.diameter,
-                                weight = fields.weight,
-                                rgb1 = fields.rgb1,
-                                mfDate = fields.mfDate,
-                                rawData = normalized
-                            )
-                            extractedCount++
-                            existingUidSet.add(incomingUid)
-                        }
-                        zip.closeEntry()
-                        entry = zip.nextEntry
-                    }
-                }
-            } ?: return "读取标签包失败"
+                dbHelper.insertSnapmakerShareTag(
+                    db,
+                    uid = incomingUid,
+                    vendor = fields.vendor,
+                    manufacturer = fields.manufacturer,
+                    mainType = fields.mainType,
+                    diameter = fields.diameter,
+                    weight = fields.weight,
+                    rgb1 = fields.rgb1,
+                    mfDate = fields.mfDate,
+                    rawData = normalized
+                )
+                extractedCount++
+                existingUidSet.add(incomingUid)
+            }
 
             when {
                 extractedCount == 0 && skippedCount == 0 && invalidCount == 0 ->

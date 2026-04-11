@@ -32,6 +32,8 @@ android {
         versionName = "3.0.9"
         val eventApiKey = localProperties.getProperty("EVENT_API_KEY", "")
         buildConfigField("String", "EVENT_API_KEY", "\"${escapeBuildConfigString(eventApiKey)}\"")
+        val tagPackageKey = localProperties.getProperty("TAG_PACKAGE_KEY", "")
+        buildConfigField("String", "TAG_PACKAGE_KEY", "\"${escapeBuildConfigString(tagPackageKey)}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -75,6 +77,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.miuix.android)
     implementation("sh.calvin.reorderable:reorderable:2.4.3")
+    implementation("net.lingala.zip4j:zip4j:2.11.5")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
