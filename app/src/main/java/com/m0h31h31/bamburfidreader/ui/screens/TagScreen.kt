@@ -347,7 +347,7 @@ private fun UidSelectionDialog(
     unknownColorIdText: String,
     onSelect: (ShareTagItem) -> Unit,
     onDismiss: () -> Unit,
-    anomalyUids: Set<String> = emptySet()
+    anomalyUids: Map<String, Int> = emptyMap()
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -463,10 +463,13 @@ private fun UidSelectionDialog(
                 }
                 val anomalyPendingTarget = pendingAnomalyItem
                 if (anomalyPendingTarget != null) {
+                    val anomalyCount = anomalyUids[anomalyPendingTarget.trayUid.lowercase()]
+                        ?: anomalyUids[anomalyPendingTarget.sourceUid.lowercase()]
+                        ?: 1
                     AlertDialog(
                         onDismissRequest = { pendingAnomalyItem = null },
                         title = { Text(stringResource(R.string.anomaly_copy_warning_title)) },
-                        text = { Text(stringResource(R.string.anomaly_copy_warning_message)) },
+                        text = { Text(stringResource(R.string.anomaly_copy_warning_message, anomalyCount)) },
                         confirmButton = {
                             TextButton(onClick = {
                                 onSelect(anomalyPendingTarget)
@@ -506,7 +509,7 @@ private fun CategoryView(
     unknownText: String,
     unknownColorText: String,
     unknownColorIdText: String,
-    anomalyUids: Set<String> = emptySet()
+    anomalyUids: Map<String, Int> = emptyMap()
 ) {
     val orderedCategories = remember(categories, categoryOrder) {
         val catMap = categories.associateBy { it.materialType }
@@ -780,7 +783,7 @@ fun TagScreen(
     cModifyRecoveryInfo: com.m0h31h31.bamburfidreader.CModifyRecoveryInfo? = null,
     onDismissCModifyRecovery: () -> Unit = {},
     onRefresh: () -> Unit = {},
-    anomalyUids: Set<String> = emptySet(),
+    anomalyUids: Map<String, Int> = emptyMap(),
     modifier: Modifier = Modifier
 ) {
     val uiStyle = LocalAppUiStyle.current
@@ -1089,10 +1092,13 @@ fun TagScreen(
             }
             val anomalyWriteTarget = pendingAnomalyWriteItem
             if (anomalyWriteTarget != null) {
+                val anomalyWriteCount = anomalyUids[anomalyWriteTarget.trayUid.lowercase()]
+                    ?: anomalyUids[anomalyWriteTarget.sourceUid.lowercase()]
+                    ?: 1
                 AlertDialog(
                     onDismissRequest = { pendingAnomalyWriteItem = null },
                     title = { Text(stringResource(R.string.anomaly_copy_warning_title)) },
-                    text = { Text(stringResource(R.string.anomaly_copy_warning_message)) },
+                    text = { Text(stringResource(R.string.anomaly_copy_warning_message, anomalyWriteCount)) },
                     confirmButton = {
                         TextButton(onClick = {
                             onStartWrite(anomalyWriteTarget)

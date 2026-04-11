@@ -1264,7 +1264,7 @@ fun MiscScreen(
                         }
                         OutlinedTextField(
                             value = nickname,
-                            onValueChange = { nickname = it },
+                            onValueChange = { if (it.length <= 16) nickname = it },
                             label = { Text(stringResource(R.string.misc_nickname_label)) },
                             placeholder = { Text(stringResource(R.string.misc_nickname_hint)) },
                             singleLine = true,
@@ -1274,6 +1274,10 @@ fun MiscScreen(
                             text = stringResource(R.string.misc_nickname_save),
                             onClick = {
                                 val trimmed = nickname.trim()
+                                if (trimmed.isEmpty() || trimmed.length > 16) {
+                                    message = context.getString(R.string.misc_nickname_invalid)
+                                    return@NeuButton
+                                }
                                 miscPrefs.edit().putString(KEY_NICKNAME, trimmed).apply()
                                 coroutineScope.launch {
                                     val ok = AnalyticsReporter.saveNickname(context, trimmed)

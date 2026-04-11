@@ -87,7 +87,7 @@ private const val LOG_TAG = "BambuRfidReader"
 private const val FILAMENT_JSON_NAME = "filaments_color_codes.json"
 private const val FILAMENTS_TYPE_MAPPING_FILE = "filaments_type_mapping.json"
 private const val FILAMENT_DB_NAME = "filaments.db"
-private const val FILAMENT_DB_VERSION = 20
+private const val FILAMENT_DB_VERSION = 21
 private const val CREALITY_MATERIAL_FILE = "creality_material_list.json"
 private const val CREALITY_MATERIAL_TABLE = "creality_materials"
 private const val FILAMENT_TABLE = "filaments"
@@ -747,7 +747,7 @@ class MainActivity : ComponentActivity() {
     private var shareRefreshStatusMessage by mutableStateOf("")
     private var shareRefreshStatusClearJob: Job? = null
     private var miscStatusMessage by mutableStateOf("")
-    private var anomalyUids by mutableStateOf<Set<String>>(emptySet())
+    private var anomalyUids by mutableStateOf<Map<String, Int>>(emptyMap())
     private var writeToolStatusMessage by mutableStateOf("")
     private var selfTagCount by mutableStateOf(0)
     private var debugInfoDialog: android.app.AlertDialog? = null
@@ -2193,7 +2193,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun isValidSnapmakerTag(rawBlocks: List<ByteArray?>): Boolean {
-        // 检查所有 16 个扇区的 trailer 块访问字节
+        // 校验 1：所有 16 个扇区的 trailer 权限位必须为 87 87 87 69
         for (sector in 0 until 16) {
             val trailer = rawBlocks.getOrNull(sector * 4 + 3) ?: return false
             if (trailer.size < 16) return false
@@ -2203,10 +2203,24 @@ class MainActivity : ComponentActivity() {
                 trailer[9] != 0x69.toByte()
             ) return false
         }
-        // 验证 vendor 字段非空（block1，offset 16）
-        val block1 = rawBlocks.getOrNull(1) ?: return false
-        val vendor = String(block1, 0, minOf(16, block1.size), Charsets.US_ASCII).trimEnd('\u0000')
-        return vendor.isNotBlank()
+
+        // 校验 2：使用 UID 派生快造密钥，逐扇区比对 KeyA 和 KeyB
+        val block0 = rawBlocks.getOrNull(0) ?: return false
+        if (block0.size < 4) return false
+        val uid = block0.copyOfRange(0, 4)
+        val (expectedKeysA, expectedKeysB) = try {
+            deriveSnapmakerKeys(uid)
+        } catch (_: Exception) {
+            return false
+        }
+        for (sector in 0 until 16) {
+            val trailer = rawBlocks[sector * 4 + 3]!!
+            val actualKeyA = trailer.copyOfRange(0, 6)
+            val actualKeyB = trailer.copyOfRange(10, 16)
+            if (!actualKeyA.contentEquals(expectedKeysA.getOrNull(sector) ?: return false)) return false
+            if (!actualKeyB.contentEquals(expectedKeysB.getOrNull(sector) ?: return false)) return false
+        }
+        return true
     }
 
     private fun refreshSnapmakerShareTagItemsAsync() {
@@ -2625,20 +2639,23 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun clearShareTagFiles(): String {
-        // 同时清空 DB 表和本地文件
+        // 同时清空拓竹和快造 DB 表及本地文件
         var dbDeleted = 0
+        var snapmakerDbDeleted = 0
         filamentDbHelper?.writableDatabase?.let { db ->
             dbDeleted = filamentDbHelper!!.clearShareTagsTable(db)
+            snapmakerDbDeleted = filamentDbHelper!!.clearSnapmakerShareTagsTable(db)
         }
         shareTagItems = emptyList()
+        snapmakerShareTagItems = emptyList()
         val externalDir = getExternalFilesDir(null) ?: filesDir
         val shareDir = File(externalDir, "rfid_files/share")
-        if (!shareDir.exists()) return "已清空标签数据库，共删除 $dbDeleted 条数据"
+        if (!shareDir.exists()) return "已清空标签数据库，共删除 ${dbDeleted + snapmakerDbDeleted} 条数据"
         return try {
             shareDir.walkTopDown()
                 .filter { it.isFile }
                 .forEach { file -> file.delete() }
-            "已清空标签数据库，共删除 $dbDeleted 条数据"
+            "已清空标签数据库，共删除 ${dbDeleted + snapmakerDbDeleted} 条数据"
         } catch (e: Exception) {
             logDebug("清空标签数据库失败: ${e.message}")
             "清空标签数据库失败: ${e.message.orEmpty()}"
@@ -5339,6 +5356,7 @@ class FilamentDbHelper(context: Context) :
             """
             CREATE TABLE IF NOT EXISTS $ANOMALY_UIDS_TABLE (
                 uid TEXT PRIMARY KEY NOT NULL,
+                report_count INTEGER NOT NULL DEFAULT 1,
                 synced_at INTEGER NOT NULL
             )
             """.trimIndent()
@@ -5530,9 +5548,15 @@ class FilamentDbHelper(context: Context) :
             db.execSQL("""
                 CREATE TABLE IF NOT EXISTS $ANOMALY_UIDS_TABLE (
                     uid TEXT PRIMARY KEY NOT NULL,
+                    report_count INTEGER NOT NULL DEFAULT 1,
                     synced_at INTEGER NOT NULL
                 )
             """.trimIndent())
+        }
+        if (oldVersion < 21) {
+            try {
+                db.execSQL("ALTER TABLE $ANOMALY_UIDS_TABLE ADD COLUMN report_count INTEGER NOT NULL DEFAULT 1")
+            } catch (_: Exception) {}
         }
     }
 
@@ -5674,6 +5698,10 @@ class FilamentDbHelper(context: Context) :
         return db.delete(SHARE_TAGS_TABLE, "1", null)
     }
 
+    fun clearSnapmakerShareTagsTable(db: SQLiteDatabase): Int {
+        return db.delete(SNAPMAKER_SHARE_TAGS_TABLE, "1", null)
+    }
+
     // --- snapmaker_share_tags 相关方法 ---
 
     data class SnapmakerShareTagRow(
@@ -5761,14 +5789,15 @@ class FilamentDbHelper(context: Context) :
 
     // --- anomaly_uids 相关方法 ---
 
-    fun saveAnomalyUids(db: SQLiteDatabase, uids: Collection<String>) {
+    fun saveAnomalyUids(db: SQLiteDatabase, uids: Map<String, Int>) {
         db.beginTransaction()
         try {
             db.delete(ANOMALY_UIDS_TABLE, null, null)
             val now = System.currentTimeMillis()
-            for (uid in uids) {
+            for ((uid, count) in uids) {
                 val cv = ContentValues()
                 cv.put("uid", uid.lowercase().trim())
+                cv.put("report_count", count)
                 cv.put("synced_at", now)
                 db.insertWithOnConflict(ANOMALY_UIDS_TABLE, null, cv, SQLiteDatabase.CONFLICT_REPLACE)
             }
@@ -5778,13 +5807,14 @@ class FilamentDbHelper(context: Context) :
         }
     }
 
-    fun getAnomalyUids(db: SQLiteDatabase): Set<String> {
-        val result = mutableSetOf<String>()
-        val cursor = db.query(ANOMALY_UIDS_TABLE, arrayOf("uid"), null, null, null, null, null)
+    fun getAnomalyUids(db: SQLiteDatabase): Map<String, Int> {
+        val result = mutableMapOf<String, Int>()
+        val cursor = db.query(ANOMALY_UIDS_TABLE, arrayOf("uid", "report_count"), null, null, null, null, null)
         cursor.use {
             while (it.moveToNext()) {
                 val uid = it.getString(0)
-                if (!uid.isNullOrBlank()) result.add(uid)
+                val count = it.getInt(1)
+                if (!uid.isNullOrBlank()) result[uid] = count
             }
         }
         return result

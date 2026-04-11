@@ -55,10 +55,11 @@ object AnalyticsReporter {
     }
 
     /**
-     * 从服务器拉取异常 UID 列表并返回。
-     * @return 异常 UID 集合，失败时返回 null。
+     * 从服务器拉取异常 UID 列表及上报计数并返回。
+     * 服务端返回格式：{"uids": [{"uid": "...", "count": N}, ...]}
+     * @return uid → 上报人数 的映射，失败时返回 null。
      */
-    suspend fun fetchAnomalyUids(context: Context): Set<String>? {
+    suspend fun fetchAnomalyUids(context: Context): Map<String, Int>? {
         val cfg = ConfigManager.getAnomalyUidsEndpoint(context)
         val endpoint = cfg.value
         com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.fetchAnomalyUids endpoint=$endpoint (from config: ${cfg.isUsable})")
@@ -76,10 +77,14 @@ object AnalyticsReporter {
             com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.fetchAnomalyUids: no 'uids' array in response: $json")
             return null
         }
-        val result = mutableSetOf<String>()
+        val result = mutableMapOf<String, Int>()
         for (i in 0 until arr.length()) {
-            val uid = arr.optString(i).lowercase().trim()
-            if (uid.isNotBlank()) result.add(uid)
+            val item = arr.optJSONObject(i)
+            if (item != null) {
+                val uid = item.optString("uid").lowercase().trim()
+                val count = item.optInt("count", 1).coerceAtLeast(1)
+                if (uid.isNotBlank()) result[uid] = count
+            }
         }
         com.m0h31h31.bamburfidreader.logDebug("AnalyticsReporter.fetchAnomalyUids: got ${result.size} uids")
         return result

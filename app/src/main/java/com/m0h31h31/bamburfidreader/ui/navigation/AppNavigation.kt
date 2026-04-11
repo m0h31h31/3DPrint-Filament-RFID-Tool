@@ -175,7 +175,7 @@ fun AppNavigation(
     readerCrealityMaterial: CrealityMaterial? = null,
     readerSnapmakerTagData: SnapmakerTagData? = null,
     readerBrandStatus: String = "",
-    anomalyUids: Set<String> = emptySet(),
+    anomalyUids: Map<String, Int> = emptyMap(),
     onReportAnomaly: (trayUid: String, cardUid: String) -> Unit = { _, _ -> },
 ) {
     val resolvedUiStyle = LocalAppUiStyle.current
