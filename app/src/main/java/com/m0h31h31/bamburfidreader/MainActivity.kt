@@ -1699,12 +1699,26 @@ class MainActivity : ComponentActivity() {
         )
         uiState = uiState.copy(status = uiString(R.string.status_waiting_tag))
         logEvent("已启用 NFC 读卡模式")
+        // 处理从系统NFC分发冷启动时携带的tag（onNewIntent不会在首次启动时触发）
+        val launchTag = intent?.getParcelableExtra<android.nfc.Tag>(NfcAdapter.EXTRA_TAG)
+        if (launchTag != null) {
+            logEvent("从启动Intent中检测到NFC标签，开始处理")
+            intent.removeExtra(NfcAdapter.EXTRA_TAG)
+            Thread { readerCallback.onTagDiscovered(launchTag) }.start()
+        }
     }
 
     override fun onPause() {
         super.onPause()
         nfcAdapter?.disableReaderMode(this)
         logEvent("应用进入后台，已关闭 NFC 读卡模式")
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val tag = intent.getParcelableExtra<android.nfc.Tag>(NfcAdapter.EXTRA_TAG) ?: return
+        logEvent("通过系统NFC分发收到标签")
+        readerCallback.onTagDiscovered(tag)
     }
 
     override fun onDestroy() {
