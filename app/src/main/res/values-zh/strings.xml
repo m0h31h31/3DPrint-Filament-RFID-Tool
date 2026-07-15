@@ -227,6 +227,7 @@
     <string name="data_total_count">总数</string>
     <string name="data_current_filter">当前筛选</string>
     <string name="data_stack_title_format">%1$s · %2$d</string>
+    <string name="data_remaining_grams_format">%1$d 克</string>
     <string name="tag_search_placeholder">搜索任意字段</string>
     <string name="tag_refresh">刷新</string>
     <string name="tag_refreshing">正在更新...</string>

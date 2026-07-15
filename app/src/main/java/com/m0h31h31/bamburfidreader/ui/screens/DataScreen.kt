@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -74,6 +75,12 @@ private data class StackedColorGroup(
     val items: List<InventoryItem>
 ) {
     val count: Int get() = items.size
+    val remainingGrams: Int? get() = totalRemainingGrams(items.map { it.remainingGrams })
+}
+
+internal fun totalRemainingGrams(values: List<Int?>): Int? {
+    if (values.isEmpty() || values.any { it == null }) return null
+    return values.sumOf { it ?: 0 }
 }
 
 private data class DataRenderGroup(
@@ -374,7 +381,9 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
                                                     colorType = item.colorType,
                                                     title = item.resolvedColorName(),
                                                     code = item.filaColorCode.ifBlank { item.colorCode },
-                                                    slot = item.trayUid.takeLast(2).ifBlank { item.materialType.take(2) }
+                                                    remainingGramsText = item.remainingGrams?.let {
+                                                        stringResource(R.string.data_remaining_grams_format, it)
+                                                    } ?: "-"
                                                 )
                                             } else {
                                                 SwatchCell(
@@ -402,7 +411,9 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
                                                     colorType = stack.displayItem.colorType,
                                                     title = stack.displayItem.resolvedColorName(),
                                                     code = stack.displayItem.filaColorCode.ifBlank { stack.displayItem.colorCode },
-                                                    slot = stack.displayItem.trayUid.takeLast(2).ifBlank { stack.displayItem.materialType.take(2) },
+                                                    remainingGramsText = stack.remainingGrams?.let {
+                                                        stringResource(R.string.data_remaining_grams_format, it)
+                                                    } ?: "-",
                                                     badgeText = if (stack.count > 1) "${stack.count}" else null,
                                                     modifier = Modifier.clickable {
                                                         if (stack.count > 1) {
@@ -662,13 +673,15 @@ private fun ModernSwatchCell(
     colorType: String,
     title: String,
     code: String,
-    slot: String,
+    remainingGramsText: String,
     badgeText: String? = null,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier.width(width).height(84.dp)) {
+    Box(modifier = modifier.width(width)) {
         Surface(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 84.dp),
             shape = RoundedCornerShape(10.dp),
             color = ModernWorkbenchTokens.Card,
             border = androidx.compose.foundation.BorderStroke(1.dp, ModernWorkbenchTokens.Line)
@@ -705,6 +718,14 @@ private fun ModernSwatchCell(
                     )
                     Text(
                         text = code.ifBlank { "-" },
+                        color = Color(0xFF888888),
+                        fontSize = 9.sp,
+                        lineHeight = 10.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = remainingGramsText,
                         color = Color(0xFF888888),
                         fontSize = 9.sp,
                         lineHeight = 10.sp,
