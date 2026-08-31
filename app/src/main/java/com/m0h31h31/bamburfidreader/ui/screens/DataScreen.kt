@@ -405,9 +405,7 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
                                                     slot = stack.displayItem.trayUid.takeLast(2).ifBlank { stack.displayItem.materialType.take(2) },
                                                     badgeText = if (stack.count > 1) "${stack.count}" else null,
                                                     modifier = Modifier.clickable {
-                                                        if (stack.count > 1) {
-                                                            activeStackDialog.value = stack
-                                                        }
+                                                        activeStackDialog.value = stack
                                                     }
                                                 )
                                             } else {
@@ -420,9 +418,7 @@ fun DataScreen(dbHelper: FilamentDbHelper?, modifier: Modifier = Modifier) {
                                                     subtitle = if (stack.count > 1) null else String.format("%.1f%%", stack.displayItem.remainingPercent),
                                                     badgeText = if (stack.count > 1) "${stack.count}" else null,
                                                     modifier = Modifier.clickable {
-                                                        if (stack.count > 1) {
-                                                            activeStackDialog.value = stack
-                                                        }
+                                                        activeStackDialog.value = stack
                                                     }
                                                 )
                                             }
