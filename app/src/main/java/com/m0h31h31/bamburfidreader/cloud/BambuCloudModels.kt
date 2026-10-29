@@ -72,7 +72,8 @@ data class BambuCloudSession(
     val tokens: BambuCloudTokens,
     val account: BambuCloudAccount,
     val savedAtMillis: Long,
-    val expiresAtMillis: Long
+    val expiresAtMillis: Long,
+    val region: BambuCloudRegion = BambuCloudRegion.CHINA
 )
 
 /** 打印历史任务中单条耗材用量（来自 amsDetailMapping）。 */

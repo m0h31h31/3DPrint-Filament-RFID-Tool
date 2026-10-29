@@ -26,13 +26,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.m0h31h31.bamburfidreader.R
 import com.m0h31h31.bamburfidreader.cloud.BambuCloudCaptchaResult
+import com.m0h31h31.bamburfidreader.cloud.BambuCloudRegion
 import com.m0h31h31.bamburfidreader.logging.logDebug
 import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicBoolean
 
 private const val GEETEST_HOST_ASSET = "geetest_v4.html"
-// 极验 captcha_id 通常与注册域名绑定，用 bambulab.cn 作为基址让 Origin/Referer 匹配。
-private const val GEETEST_BASE_URL = "https://bambulab.cn/"
+// 极验 captcha_id 通常与注册域名绑定，使用所选站点的基址匹配 Origin/Referer。
 
 /**
  * 原生极验 v4（GeeTest v4）人机验证控件。
@@ -47,7 +47,8 @@ fun BambuGeetestCaptchaDialog(
     captchaId: String,
     onResult: (BambuCloudCaptchaResult) -> Unit,
     onError: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    region: BambuCloudRegion = BambuCloudRegion.CHINA
 ) {
     // 保证只回传一次
     val delivered = remember { AtomicBoolean(false) }
@@ -149,7 +150,7 @@ fun BambuGeetestCaptchaDialog(
                                 logDebug("Geetest host asset load failed: ${it.message}")
                                 ""
                             }
-                            loadDataWithBaseURL(GEETEST_BASE_URL, html, "text/html", "utf-8", null)
+                            loadDataWithBaseURL(region.captchaBaseUrl, html, "text/html", "utf-8", null)
                         }
                     }
                 )

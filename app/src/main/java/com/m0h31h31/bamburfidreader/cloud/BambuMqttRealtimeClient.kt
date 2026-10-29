@@ -26,7 +26,7 @@ class BambuMqttRealtimeClient(
         if (cleanDeviceIds.isEmpty() || session.tokens.accessToken.isBlank()) return
         onConnectionState(BambuMqttConnectionState.CONNECTING, "")
         val mqttClient = MqttAsyncClient(
-            CLOUD_MQTT_URL,
+            session.region.mqttUrl,
             "bambu-rfid-${session.account.uid}-${UUID.randomUUID()}",
             MemoryPersistence()
         )
@@ -118,7 +118,4 @@ class BambuMqttRealtimeClient(
         }
     }
 
-    companion object {
-        const val CLOUD_MQTT_URL = "ssl://cn.mqtt.bambulab.com:8883"
-    }
 }

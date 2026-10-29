@@ -27,12 +27,14 @@ class SharedPreferencesBambuCloudSessionStore(
             tokens = tokens,
             account = account,
             savedAtMillis = prefs.getLong(KEY_SAVED_AT_MS, 0L),
-            expiresAtMillis = prefs.getLong(KEY_EXPIRES_AT_MS, 0L)
+            expiresAtMillis = prefs.getLong(KEY_EXPIRES_AT_MS, 0L),
+            region = BambuCloudRegion.fromStoredValue(prefs.getString(KEY_REGION, null))
         )
     }
 
     override fun saveSession(session: BambuCloudSession) {
         prefs.edit()
+            .putString(KEY_REGION, session.region.storedValue)
             .putString(KEY_ACCESS_TOKEN, session.tokens.accessToken)
             .putString(KEY_REFRESH_TOKEN, session.tokens.refreshToken)
             .putInt(KEY_EXPIRES_IN_SECONDS, session.tokens.expiresInSeconds)
@@ -53,6 +55,7 @@ class SharedPreferencesBambuCloudSessionStore(
 
     private companion object {
         const val PREFS_NAME = "bambu_cloud_session"
+        const val KEY_REGION = "region"
         const val KEY_ACCESS_TOKEN = "access_token"
         const val KEY_REFRESH_TOKEN = "refresh_token"
         const val KEY_EXPIRES_IN_SECONDS = "expires_in_seconds"

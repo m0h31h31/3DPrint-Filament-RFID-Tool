@@ -3149,8 +3149,7 @@ class MainActivity : ComponentActivity() {
      * 仅用于本地目录命名，做最小化清洗避免路径非法字符。
      */
     private fun getDeviceIdSuffix(): String {
-        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-        val rawId = androidId.orEmpty().ifBlank { "unknown" }
+        val rawId = com.m0h31h31.bamburfidreader.utils.AnalyticsReporter.getInstallId(this)
 
         return rawId
             .lowercase(Locale.US)

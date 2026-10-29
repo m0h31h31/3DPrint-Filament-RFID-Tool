@@ -163,7 +163,7 @@ class BambuCloudController private constructor(appContext: Context) {
         val key = if (session == null) {
             ""
         } else {
-            "${session.account.uid}:${session.tokens.accessToken}:${deviceIds.joinToString("|")}"
+            "${session.region.storedValue}:${session.account.uid}:${session.tokens.accessToken}:${deviceIds.joinToString("|")}"
         }
         if (key == mqttKey && (key.isBlank() || mqttClient != null)) return
         mqttClient?.stop()

@@ -63,7 +63,7 @@
     <string name="cloud_status_login_success">Login successful</string>
     <string name="cloud_status_logged_out">Logged out</string>
     <string name="cloud_status_logging_in">Logging in...</string>
-    <string name="cloud_status_verify_required">Verification code required</string>
+    <string name="cloud_status_verify_required">Please check your phone text messages (SMS) for the verification code and enter it below.</string>
     <string name="cloud_status_login_failed">Login failed: %1$s</string>
     <string name="cloud_status_account_password_incorrect">Incorrect account or password</string>
     <string name="cloud_status_verification_code_incorrect">Incorrect verification code</string>
@@ -1043,4 +1043,9 @@
     <string name="cost_prices_subtitle">Material price per gram, yuan/g</string>
     <string name="cost_prices_search">Search</string>
     <string name="cost_price_save">Save</string>
+    <string name="cloud_region_label">Account region</string>
+    <string name="cloud_region_china">China</string>
+    <string name="cloud_region_global">Global</string>
+    <string name="cloud_status_verify_email_required">Please check your email for the verification code and enter it below.</string>
+    <string name="cloud_login_password_help">If you forgot your password or do not know it, go to your personal settings on MakerWorld to reset or set a password, then log in again.</string>
 </resources>

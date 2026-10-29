@@ -1,10 +1,12 @@
 package com.m0h31h31.bamburfidreader.utils
 
 import android.content.Context
+import android.media.MediaDrm
 import android.os.Build
 import android.provider.Settings
 import com.m0h31h31.bamburfidreader.BuildConfig
 import org.json.JSONObject
+import java.util.UUID
 
 data class UpdateInfo(
     val versionCode: Int,
@@ -25,12 +27,38 @@ object AnalyticsReporter {
     }
 
     /**
-     * 获取本设备的稳定设备 ID（ANDROID_ID）。
-     * 绑定 设备 + 用户 + 应用签名，卸载重装、系统升级均不变，仅出厂重置后改变。
-     * Min SDK 28，ANDROID_ID 始终可用。
+     * 保留有效 ANDROID_ID；异常时优先使用应用范围的 Widevine 派生 UUID。
+     * 已保存的编号优先，避免后续系统返回值变化导致身份切换。
+     * Widevine 也不可用时才使用随机 UUID，此兜底无法保证清除数据或重装后不变。
      */
-    fun getInstallId(context: Context): String =
-        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+    fun getInstallId(context: Context): String {
+        val prefs = context.getSharedPreferences("device_identity", Context.MODE_PRIVATE)
+        return StableDeviceId.getOrCreate(
+            readStored = { prefs.getString("install_id", null) },
+            readAndroidId = {
+                Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+            },
+            save = { id ->
+                if (!prefs.edit().putString("install_id", id).commit()) {
+                    com.m0h31h31.bamburfidreader.logging.logDebug(
+                        "Device identity persistence failed; current process retains the ID"
+                    )
+                }
+            },
+            readDrmId = {
+                try {
+                    MediaDrm(UUID.fromString("edef8ba9-79d6-4ace-a3c8-27dcd51d21ed")).use { drm ->
+                        drm.getPropertyByteArray(MediaDrm.PROPERTY_DEVICE_UNIQUE_ID)
+                    }
+                } catch (_: Exception) {
+                    com.m0h31h31.bamburfidreader.logging.logDebug(
+                        "Device identity: Widevine unavailable; using persisted random UUID"
+                    )
+                    null
+                }
+            }
+        )
+    }
 
     /**
      * 上报异常标签到服务器。

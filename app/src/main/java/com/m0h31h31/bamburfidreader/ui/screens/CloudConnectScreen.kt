@@ -41,6 +41,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.FilterChip
+import com.m0h31h31.bamburfidreader.cloud.BambuCloudRegion
 import com.m0h31h31.bamburfidreader.ui.components.AppIcons
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -128,6 +130,7 @@ fun CloudConnectScreen(
 
     // 仅 UI 内的临时状态（弹窗/输入框），离开页面可重置
     var showLoginDialog by remember { mutableStateOf(false) }
+    var loginRegion by remember { mutableStateOf(repository.loadSession()?.region ?: BambuCloudRegion.CHINA) }
     var account by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var verificationCode by remember { mutableStateOf("") }
@@ -156,7 +159,7 @@ fun CloudConnectScreen(
         printers.map { it.deviceId }.filter { it.isNotBlank() }.joinToString("|")
     }
     // 维护 MQTT 实时连接；离开页面不再 stop，连接保持
-    LaunchedEffect(session?.account?.uid, session?.tokens?.accessToken, deviceIdsKey) {
+    LaunchedEffect(session?.region, session?.account?.uid, session?.tokens?.accessToken, deviceIdsKey) {
         controller.syncRealtime(context)
     }
 
@@ -186,7 +189,10 @@ fun CloudConnectScreen(
                 showGeetest = false
                 verificationRequired = true
                 showLoginDialog = true
-                statusMessage = context.getString(R.string.cloud_status_verify_required)
+                statusMessage = context.getString(
+                    if (loginRegion == BambuCloudRegion.GLOBAL) R.string.cloud_status_verify_email_required
+                    else R.string.cloud_status_verify_required
+                )
             }
             is BambuCloudRepositoryResult.CaptchaRequired -> {
                 showLoginDialog = false
@@ -232,7 +238,7 @@ fun CloudConnectScreen(
         captchaAttempted = false
         loginInProgress = true
         coroutineScope.launch {
-            handleLoginResult(repository.loginWithPassword(account, password))
+            handleLoginResult(repository.loginWithPassword(account, password, loginRegion))
         }
     }
 
@@ -244,7 +250,7 @@ fun CloudConnectScreen(
         captchaAttempted = false
         loginInProgress = true
         coroutineScope.launch {
-            handleLoginResult(repository.loginWithCode(account, password, verificationCode))
+            handleLoginResult(repository.loginWithCode(account, password, verificationCode, loginRegion))
         }
     }
 
@@ -356,7 +362,8 @@ fun CloudConnectScreen(
                             .padding(horizontal = 7.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = stringResource(R.string.cloud_login_region_cn_badge),
+                            text = stringResource(if (loginRegion == BambuCloudRegion.CHINA)
+                                R.string.cloud_login_region_cn_badge else R.string.cloud_region_global),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             fontWeight = FontWeight.Bold
@@ -366,6 +373,27 @@ fun CloudConnectScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.cloud_region_label), style = MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BambuCloudRegion.entries.forEach { region ->
+                            FilterChip(
+                                selected = loginRegion == region,
+                                enabled = !loginInProgress && !showGeetest,
+                                onClick = {
+                                    if (loginRegion != region) {
+                                        loginRegion = region
+                                        verificationRequired = false
+                                        verificationCode = ""
+                                        captchaId = ""
+                                        captchaAttempted = false
+                                        statusMessage = ""
+                                    }
+                                },
+                                label = { Text(stringResource(if (region == BambuCloudRegion.CHINA)
+                                    R.string.cloud_region_china else R.string.cloud_region_global)) }
+                            )
+                        }
+                    }
                     if (statusMessage.isNotBlank()) {
                         Box(
                             modifier = Modifier
@@ -429,6 +457,11 @@ fun CloudConnectScreen(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
+                    Text(
+                        text = stringResource(R.string.cloud_login_password_help),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             },
             confirmButton = {
@@ -484,6 +517,7 @@ fun CloudConnectScreen(
     if (showGeetest && captchaId.isNotBlank()) {
         BambuGeetestCaptchaDialog(
             captchaId = captchaId,
+            region = loginRegion,
             onResult = { captcha ->
                 // 极验解题成功 → 携带验证结果在 App 内重新登录（仅回提一次，防循环）
                 showGeetest = false
@@ -491,7 +525,7 @@ fun CloudConnectScreen(
                 loginInProgress = true
                 statusMessage = context.getString(R.string.cloud_status_captcha_verifying)
                 coroutineScope.launch {
-                    handleLoginResult(repository.loginWithPasswordAndCaptcha(account, password, captcha))
+                    handleLoginResult(repository.loginWithPasswordAndCaptcha(account, password, captcha, loginRegion))
                 }
             },
             onError = { msg ->
